@@ -22,7 +22,9 @@ from hu_counseling_bot_part2 import (
     handle_counselor_bio, counselor_dashboard, toggle_availability, counselor_stats,
     rate_session_start, submit_rating, admin_panel, admin_pending_counselors,
     review_counselor, approve_counselor_handler, reject_counselor_handler,
-    admin_detailed_stats, admin_manage_counselors, admin_pending_sessions
+    admin_detailed_stats, admin_manage_counselors, admin_pending_sessions,
+    admin_view_counselor, admin_deactivate_counselor, admin_reactivate_counselor,
+    admin_ban_counselor, admin_edit_counselor
 )
 
 logging.basicConfig(
@@ -167,6 +169,13 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_detailed_stats, pattern='^admin_detailed_stats$'))
     app.add_handler(CallbackQueryHandler(admin_manage_counselors, pattern='^admin_manage_counselors$'))
     app.add_handler(CallbackQueryHandler(admin_pending_sessions, pattern='^admin_pending_sessions$'))
+    
+    # Admin counselor management
+    app.add_handler(CallbackQueryHandler(admin_view_counselor, pattern='^admin_view_counselor_'))
+    app.add_handler(CallbackQueryHandler(admin_deactivate_counselor, pattern='^admin_deactivate_'))
+    app.add_handler(CallbackQueryHandler(admin_reactivate_counselor, pattern='^admin_reactivate_'))
+    app.add_handler(CallbackQueryHandler(admin_ban_counselor, pattern='^admin_ban_'))
+    app.add_handler(CallbackQueryHandler(admin_edit_counselor, pattern='^admin_edit_'))
     
     # Message handlers (for descriptions and session messages)
     async def text_message_handler(update, context):

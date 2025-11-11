@@ -626,7 +626,7 @@ async def reject_counselor_handler(update: Update, context: ContextTypes.DEFAULT
 # ==================== ADDITIONAL ADMIN HANDLERS ====================
 
 async def admin_detailed_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show detailed system statistics"""
+    """Show detailed system statistics with REAL data"""
     query = update.callback_query
     await query.answer()
     
@@ -637,11 +637,61 @@ async def admin_detailed_stats(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.answer("⚠️ You don't have admin access.", show_alert=True)
         return
     
-    stats = db.get_bot_stats()
-    
-    # Get topic distribution
+    # Get REAL statistics directly from database
     conn = db.get_connection()
     cursor = conn.cursor()
+    
+    # Total users
+    cursor.execute('SELECT COUNT(*) as count FROM users')
+    total_users = cursor.fetchone()['count']
+    
+    # Total counselors
+    cursor.execute('SELECT COUNT(*) as count FROM counselors')
+    total_counselors = cursor.fetchone()['count']
+    
+    # Approved counselors
+    cursor.execute("SELECT COUNT(*) as count FROM counselors WHERE status = 'approved'")
+    approved_counselors = cursor.fetchone()['count']
+    
+    # Currently online counselors
+    cursor.execute("SELECT COUNT(*) as count FROM counselors WHERE status = 'approved' AND is_available = 1")
+    online_counselors = cursor.fetchone()['count']
+    
+    # Pending counselors
+    cursor.execute("SELECT COUNT(*) as count FROM counselors WHERE status = 'pending'")
+    pending_counselors = cursor.fetchone()['count']
+    
+    # Rejected counselors
+    cursor.execute("SELECT COUNT(*) as count FROM counselors WHERE status = 'rejected'")
+    rejected_counselors = cursor.fetchone()['count']
+    
+    # Deactivated counselors
+    cursor.execute("SELECT COUNT(*) as count FROM counselors WHERE status = 'deactivated'")
+    deactivated_counselors = cursor.fetchone()['count']
+    
+    # Banned counselors
+    cursor.execute("SELECT COUNT(*) as count FROM counselors WHERE status = 'banned'")
+    banned_counselors = cursor.fetchone()['count']
+    
+    # Total sessions
+    cursor.execute('SELECT COUNT(*) as count FROM counseling_sessions')
+    total_sessions = cursor.fetchone()['count']
+    
+    # Active sessions
+    cursor.execute("SELECT COUNT(*) as count FROM counseling_sessions WHERE status = 'active'")
+    active_sessions = cursor.fetchone()['count']
+    
+    # Completed sessions
+    cursor.execute("SELECT COUNT(*) as count FROM counseling_sessions WHERE status IN ('completed', 'ended')")
+    completed_sessions = cursor.fetchone()['count']
+    
+    # Pending sessions (waiting for counselor)
+    cursor.execute("SELECT COUNT(*) as count FROM counseling_sessions WHERE status = 'requested'")
+    pending_sessions = cursor.fetchone()['count']
+    
+    # Matched sessions (counselor matched but not accepted yet)
+    cursor.execute("SELECT COUNT(*) as count FROM counseling_sessions WHERE status = 'matched'")
+    matched_sessions = cursor.fetchone()['count']
     
     # Top topics
     cursor.execute('''
@@ -655,44 +705,70 @@ async def admin_detailed_stats(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # Average rating
     cursor.execute('''
-        SELECT AVG(CAST(rating_sum AS FLOAT) / NULLIF(rating_count, 0)) as avg_rating
+        SELECT AVG(CAST(rating_sum AS FLOAT) / NULLIF(rating_count, 0)) as avg_rating,
+               SUM(rating_count) as total_ratings
         FROM counselors 
         WHERE rating_count > 0
     ''')
-    avg_rating_row = cursor.fetchone()
-    avg_rating = avg_rating_row['avg_rating'] if avg_rating_row['avg_rating'] else 0
+    rating_row = cursor.fetchone()
+    avg_rating = rating_row['avg_rating'] if rating_row['avg_rating'] else 0
+    total_ratings = rating_row['total_ratings'] if rating_row['total_ratings'] else 0
+    
+    # Total messages exchanged
+    cursor.execute('SELECT COUNT(*) as count FROM session_messages')
+    total_messages = cursor.fetchone()['count']
     
     conn.close()
     
-    topics_text = '\n'.join([f"• {COUNSELING_TOPICS.get(row['topic'], {}).get('name', row['topic'])}: {row['count']}" 
-                             for row in top_topics])
+    # Format top topics
+    topics_text = '\n'.join([
+        f"• {COUNSELING_TOPICS.get(row['topic'], {}).get('icon', '💬')} {COUNSELING_TOPICS.get(row['topic'], {}).get('name', row['topic'])}: {row['count']}" 
+        for row in top_topics
+    ])
+    
+    # Calculate completion rate
+    completion_rate = 0
+    if total_sessions > 0:
+        completion_rate = (completed_sessions / total_sessions) * 100
     
     text = f"""
-**Detailed System Statistics** 📊
+**📊 Detailed System Statistics**
 
-**Users & Counselors:**
-👥 Total Users: {stats.get('total_users', 0)}
-👨‍⚕️ Total Counselors: {stats.get('total_counselors', 0)}
-🟢 Active Counselors: {stats.get('active_counselors', 0)}
-✅ Approved: {stats.get('total_counselors', 0) - len(db.get_pending_counselors())}
-⏳ Pending: {len(db.get_pending_counselors())}
+**👥 Users & Counselors:**
+• Total Users: **{total_users}**
+• Total Counselors: **{total_counselors}**
+  ├─ ✅ Approved: {approved_counselors}
+  ├─ 🟢 Currently Online: {online_counselors}
+  ├─ ⏳ Pending: {pending_counselors}
+  ├─ ❌ Rejected: {rejected_counselors}
+  ├─ 🔴 Deactivated: {deactivated_counselors}
+  └─ 🚫 Banned: {banned_counselors}
 
-**Sessions:**
-📊 Total: {stats.get('total_sessions', 0)}
-🔄 Active: {stats.get('active_sessions', 0)}
-✅ Completed: {stats.get('completed_sessions', 0)}
-⏳ Pending: {stats.get('pending_sessions', 0)}
+**📊 Sessions Overview:**
+• Total Sessions: **{total_sessions}**
+  ├─ 🔄 Active Now: {active_sessions}
+  ├─ ✅ Completed: {completed_sessions}
+  ├─ ⏳ Pending (waiting): {pending_sessions}
+  └─ 🎯 Matched (not started): {matched_sessions}
+• Completion Rate: **{completion_rate:.1f}%**
 
-**Quality Metrics:**
-⭐ Average Rating: {avg_rating:.2f}/5.0
+**💬 Messages:**
+• Total Messages Exchanged: **{total_messages}**
 
-**Top 5 Topics:**
-{topics_text if topics_text else '• No data yet'}
+**⭐ Quality Metrics:**
+• Average Rating: **{avg_rating:.2f}/5.0**
+• Total Ratings Received: **{total_ratings}**
 
-**System Health:** ✅ Operational
+**🔥 Top 5 Topics:**
+{topics_text if topics_text else '• No sessions yet'}
+
+**🏥 System Health:** ✅ Operational
 """
     
-    keyboard = [[InlineKeyboardButton("◀️ Back to Admin Panel", callback_data='admin_panel')]]
+    keyboard = [
+        [InlineKeyboardButton("🔄 Refresh", callback_data='admin_detailed_stats')],
+        [InlineKeyboardButton("◀️ Back to Admin Panel", callback_data='admin_panel')]
+    ]
     
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
@@ -726,19 +802,28 @@ async def admin_manage_counselors(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
         return
     
-    text = "**Counselor Management** 👥\n\n"
+    text = "**Counselor Management** 👥\n\nClick on a counselor to manage:\n\n"
     
+    keyboard = []
     for c in counselors[:10]:
-        status_emoji = {"approved": "✅", "pending": "⏳", "rejected": "❌"}.get(c['status'], "❓")
+        status_emoji = {
+            "approved": "✅", 
+            "pending": "⏳", 
+            "rejected": "❌", 
+            "deactivated": "🔴",
+            "banned": "🚫"
+        }.get(c['status'], "❓")
         avail_emoji = "🟢" if c['is_available'] else "🔴"
-        text += f"{status_emoji} **{c['display_name']}** (ID: {c['counselor_id']})\n"
-        text += f"   Status: {c['status'].title()} | {avail_emoji} | Sessions: {c['total_sessions']}\n\n"
+        
+        # Create button for each counselor
+        button_text = f"{status_emoji} {c['display_name']} (#{c['counselor_id']})"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f'admin_view_counselor_{c["counselor_id"]}')])
     
-    keyboard = [
+    keyboard.extend([
         [InlineKeyboardButton("📋 View Pending Applications", callback_data='admin_pending_counselors')],
         [InlineKeyboardButton("🔄 Refresh List", callback_data='admin_manage_counselors')],
         [InlineKeyboardButton("◀️ Back", callback_data='admin_panel')]
-    ]
+    ])
     
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
@@ -783,11 +868,252 @@ async def admin_pending_sessions(update: Update, context: ContextTypes.DEFAULT_T
     
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
+# ==================== NEW ADMIN MANAGEMENT HANDLERS ====================
+
+async def admin_view_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """View detailed counselor information with management options"""
+    query = update.callback_query
+    await query.answer()
+    
+    counselor_id = int(query.data.replace('admin_view_counselor_', ''))
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import db, ADMIN_IDS
+    if not db.is_admin(user_id) and user_id not in ADMIN_IDS:
+        await query.answer("⚠️ You don't have admin access.", show_alert=True)
+        return
+    
+    counselor = db.get_counselor(counselor_id)
+    if not counselor:
+        await query.edit_message_text("⚠️ Counselor not found.")
+        return
+    
+    # Get counselor stats
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    
+    # Get rating info
+    rating_avg = 0
+    if counselor['rating_count'] > 0:
+        rating_avg = counselor['rating_sum'] / counselor['rating_count']
+    
+    # Get active session count
+    cursor.execute('''
+        SELECT COUNT(*) as count FROM counseling_sessions 
+        WHERE counselor_id = ? AND status = 'active'
+    ''', (counselor_id,))
+    active_sessions = cursor.fetchone()['count']
+    
+    conn.close()
+    
+    # Format specializations
+    specs = counselor['specializations']
+    spec_text = '\n'.join([f"• {COUNSELING_TOPICS[s]['icon']} {COUNSELING_TOPICS[s]['name']}" for s in specs])
+    
+    # Status display
+    status_emoji = {
+        "approved": "✅ Approved",
+        "pending": "⏳ Pending",
+        "rejected": "❌ Rejected",
+        "deactivated": "🔴 Deactivated",
+        "banned": "🚫 Banned"
+    }.get(counselor['status'], "❓ Unknown")
+    
+    avail_status = "🟢 Online" if counselor['is_available'] else "🔴 Offline"
+    
+    text = f"""
+**Counselor Details** 📊
+
+**ID:** {counselor_id}
+**Display Name:** {counselor['display_name']}
+**Status:** {status_emoji}
+**Availability:** {avail_status}
+
+**Statistics:**
+📊 Total Sessions: {counselor['total_sessions']}
+🔄 Active Now: {active_sessions}
+⭐ Rating: {rating_avg:.1f}/5.0 ({counselor['rating_count']} ratings)
+
+**Bio:**
+{counselor['bio']}
+
+**Specializations:**
+{spec_text}
+
+**Actions:**
+"""
+    
+    # Create action buttons based on status
+    keyboard = []
+    
+    if counselor['status'] == 'approved':
+        keyboard.append([InlineKeyboardButton("🔴 Deactivate", callback_data=f'admin_deactivate_{counselor_id}')])
+        keyboard.append([InlineKeyboardButton("🚫 Ban", callback_data=f'admin_ban_{counselor_id}')])
+    elif counselor['status'] == 'deactivated':
+        keyboard.append([InlineKeyboardButton("🟢 Reactivate", callback_data=f'admin_reactivate_{counselor_id}')])
+        keyboard.append([InlineKeyboardButton("🚫 Ban", callback_data=f'admin_ban_{counselor_id}')])
+    elif counselor['status'] == 'pending':
+        keyboard.append([InlineKeyboardButton("✅ Approve", callback_data=f'approve_counselor_{counselor_id}')])
+        keyboard.append([InlineKeyboardButton("❌ Reject", callback_data=f'reject_counselor_{counselor_id}')])
+    elif counselor['status'] == 'banned':
+        keyboard.append([InlineKeyboardButton("🟢 Unban", callback_data=f'admin_reactivate_{counselor_id}')])
+    
+    keyboard.append([InlineKeyboardButton("✏️ Edit Info", callback_data=f'admin_edit_{counselor_id}')])
+    keyboard.append([InlineKeyboardButton("◀️ Back", callback_data='admin_manage_counselors')])
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def admin_deactivate_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Deactivate a counselor temporarily"""
+    query = update.callback_query
+    await query.answer()
+    
+    counselor_id = int(query.data.replace('admin_deactivate_', ''))
+    admin_id = query.from_user.id
+    
+    from hu_counseling_bot import db
+    counselor = db.get_counselor(counselor_id)
+    
+    if not counselor:
+        await query.edit_message_text("⚠️ Counselor not found.")
+        return
+    
+    db.deactivate_counselor(counselor_id, admin_id)
+    
+    # Notify counselor
+    await context.bot.send_message(
+        chat_id=counselor['user_id'],
+        text="⚠️ **Account Deactivated**\n\n"
+             "Your counselor account has been temporarily deactivated by an administrator.\n\n"
+             "You cannot accept new sessions until reactivated. Please contact fellowship leadership for more information.",
+        parse_mode='Markdown'
+    )
+    
+    await query.edit_message_text(
+        f"🔴 **Counselor Deactivated**\n\n"
+        f"Counselor #{counselor_id} ({counselor['display_name']}) has been deactivated.\n\n"
+        f"They have been notified and cannot accept new sessions.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Back to List", callback_data='admin_manage_counselors')
+        ]]),
+        parse_mode='Markdown'
+    )
+
+async def admin_reactivate_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reactivate a deactivated counselor"""
+    query = update.callback_query
+    await query.answer()
+    
+    counselor_id = int(query.data.replace('admin_reactivate_', ''))
+    admin_id = query.from_user.id
+    
+    from hu_counseling_bot import db
+    counselor = db.get_counselor(counselor_id)
+    
+    if not counselor:
+        await query.edit_message_text("⚠️ Counselor not found.")
+        return
+    
+    db.reactivate_counselor(counselor_id, admin_id)
+    
+    # Notify counselor
+    await context.bot.send_message(
+        chat_id=counselor['user_id'],
+        text="✅ **Account Reactivated**\n\n"
+             "Your counselor account has been reactivated!\n\n"
+             "You can now toggle your availability and start accepting sessions again. 🙏",
+        parse_mode='Markdown'
+    )
+    
+    await query.edit_message_text(
+        f"✅ **Counselor Reactivated**\n\n"
+        f"Counselor #{counselor_id} ({counselor['display_name']}) has been reactivated.\n\n"
+        f"They can now accept sessions again.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Back to List", callback_data='admin_manage_counselors')
+        ]]),
+        parse_mode='Markdown'
+    )
+
+async def admin_ban_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ban a counselor permanently"""
+    query = update.callback_query
+    await query.answer()
+    
+    counselor_id = int(query.data.replace('admin_ban_', ''))
+    admin_id = query.from_user.id
+    
+    from hu_counseling_bot import db
+    counselor = db.get_counselor(counselor_id)
+    
+    if not counselor:
+        await query.edit_message_text("⚠️ Counselor not found.")
+        return
+    
+    db.ban_counselor(counselor_id, admin_id, reason="Admin decision")
+    
+    # Notify counselor
+    await context.bot.send_message(
+        chat_id=counselor['user_id'],
+        text="🚫 **Account Banned**\n\n"
+             "Your counselor account has been permanently banned.\n\n"
+             "You cannot access counseling features. Please contact fellowship leadership if you have questions.",
+        parse_mode='Markdown'
+    )
+    
+    await query.edit_message_text(
+        f"🚫 **Counselor Banned**\n\n"
+        f"Counselor #{counselor_id} ({counselor['display_name']}) has been permanently banned.\n\n"
+        f"They have been notified and cannot access counseling features.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Back to List", callback_data='admin_manage_counselors')
+        ]]),
+        parse_mode='Markdown'
+    )
+
+async def admin_edit_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Edit counselor information - shows edit options"""
+    query = update.callback_query
+    await query.answer()
+    
+    counselor_id = int(query.data.replace('admin_edit_', ''))
+    
+    from hu_counseling_bot import db
+    counselor = db.get_counselor(counselor_id)
+    
+    if not counselor:
+        await query.edit_message_text("⚠️ Counselor not found.")
+        return
+    
+    text = f"""
+**Edit Counselor Info** ✏️
+
+**Counselor:** {counselor['display_name']} (#{counselor_id})
+
+**Current Information:**
+• Display Name: {counselor['display_name']}
+• Status: {counselor['status']}
+• Total Sessions: {counselor['total_sessions']}
+
+**Note:** To edit counselor information, contact the counselor directly and ask them to update their profile, or use the database admin tools.
+
+**Future Feature:** Direct editing UI will be added soon.
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("📱 Message Counselor", url=f"tg://user?id={counselor['user_id']}")],
+        [InlineKeyboardButton("◀️ Back", callback_data=f'admin_view_counselor_{counselor_id}')]
+    ]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
 # Export all handler functions
 __all__ = [
     'register_counselor_start', 'counselor_select_specialization', 'toggle_specialization',
     'handle_counselor_bio', 'counselor_dashboard', 'toggle_availability', 'counselor_stats',
     'rate_session_start', 'submit_rating', 'admin_panel', 'admin_pending_counselors',
     'review_counselor', 'approve_counselor_handler', 'reject_counselor_handler',
-    'admin_detailed_stats', 'admin_manage_counselors', 'admin_pending_sessions'
+    'admin_detailed_stats', 'admin_manage_counselors', 'admin_pending_sessions',
+    'admin_view_counselor', 'admin_deactivate_counselor', 'admin_reactivate_counselor',
+    'admin_ban_counselor', 'admin_edit_counselor'
 ]

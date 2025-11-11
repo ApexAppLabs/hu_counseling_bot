@@ -5,11 +5,31 @@ Supports anonymous counseling sessions between users and counselors
 
 import sqlite3
 import json
+import time
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Tuple
 import logging
+from functools import wraps
 
 logger = logging.getLogger(__name__)
+
+def retry_on_locked(max_retries=3, delay=0.5):
+    """Decorator to retry database operations if locked"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except sqlite3.OperationalError as e:
+                    if 'locked' in str(e).lower() and attempt < max_retries - 1:
+                        logger.warning(f"Database locked, retrying {func.__name__} (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(delay * (attempt + 1))  # Exponential backoff
+                    else:
+                        raise
+            return func(*args, **kwargs)  # Final attempt
+        return wrapper
+    return decorator
 
 # Counseling topics for student gospel fellowship
 COUNSELING_TOPICS = {
@@ -106,9 +126,20 @@ class CounselingDatabase:
         self.init_database()
     
     def get_connection(self):
-        """Get database connection"""
-        conn = sqlite3.connect(self.db_path)
+        """Get database connection with proper timeout and WAL mode"""
+        conn = sqlite3.connect(
+            self.db_path, 
+            timeout=30.0,  # Wait up to 30 seconds if database is locked
+            check_same_thread=False  # Allow connection across threads
+        )
         conn.row_factory = sqlite3.Row
+        
+        # Enable WAL mode for better concurrency
+        conn.execute('PRAGMA journal_mode=WAL')
+        
+        # Set busy timeout
+        conn.execute('PRAGMA busy_timeout=30000')  # 30 seconds in milliseconds
+        
         return conn
     
     def init_database(self):
@@ -360,6 +391,85 @@ class CounselingDatabase:
         conn.commit()
         conn.close()
     
+    def deactivate_counselor(self, counselor_id: int, admin_id: int):
+        """Temporarily deactivate a counselor (can be reactivated)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE counselors 
+            SET status = 'deactivated', is_available = 0
+            WHERE counselor_id = ?
+        ''', (counselor_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Counselor {counselor_id} deactivated by admin {admin_id}")
+    
+    def reactivate_counselor(self, counselor_id: int, admin_id: int):
+        """Reactivate a deactivated counselor"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE counselors 
+            SET status = 'approved', is_available = 0
+            WHERE counselor_id = ?
+        ''', (counselor_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Counselor {counselor_id} reactivated by admin {admin_id}")
+    
+    def ban_counselor(self, counselor_id: int, admin_id: int, reason: str = ''):
+        """Permanently ban a counselor"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE counselors 
+            SET status = 'banned', is_available = 0
+            WHERE counselor_id = ?
+        ''', (counselor_id,))
+        
+        # Log the ban
+        conn.commit()
+        conn.close()
+        
+        logger.warning(f"Counselor {counselor_id} BANNED by admin {admin_id}. Reason: {reason}")
+    
+    def update_counselor_info(self, counselor_id: int, display_name: str = None, bio: str = None, specializations: List[str] = None):
+        """Update counselor information"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        updates = []
+        params = []
+        
+        if display_name:
+            updates.append("display_name = ?")
+            params.append(display_name)
+        
+        if bio:
+            updates.append("bio = ?")
+            params.append(bio)
+        
+        if specializations:
+            updates.append("specializations = ?")
+            params.append(json.dumps(specializations))
+        
+        if updates:
+            query = f"UPDATE counselors SET {', '.join(updates)} WHERE counselor_id = ?"
+            params.append(counselor_id)
+            cursor.execute(query, params)
+            conn.commit()
+        
+        conn.close()
+        
+        logger.info(f"Counselor {counselor_id} info updated")
+    
     def get_counselor_by_user_id(self, user_id: int) -> Optional[Dict]:
         """Get counselor data by user_id"""
         conn = self.get_connection()
@@ -488,6 +598,7 @@ class CounselingDatabase:
         
         return session_id
     
+    @retry_on_locked(max_retries=3, delay=0.5)
     def match_session_with_counselor(self, session_id: int, counselor_id: int):
         """Match a session with a counselor"""
         conn = self.get_connection()
@@ -501,7 +612,10 @@ class CounselingDatabase:
         
         conn.commit()
         conn.close()
+        
+        logger.info(f"Session {session_id} matched with counselor {counselor_id}")
     
+    @retry_on_locked(max_retries=3, delay=0.5)
     def start_session(self, session_id: int):
         """Start an active counseling session"""
         conn = self.get_connection()
@@ -521,6 +635,8 @@ class CounselingDatabase:
         
         conn.commit()
         conn.close()
+        
+        logger.info(f"Session {session_id} started successfully")
     
     def end_session(self, session_id: int, end_reason: str = 'completed'):
         """End a counseling session"""
@@ -656,6 +772,7 @@ class CounselingDatabase:
     
     # ==================== MESSAGE MANAGEMENT ====================
     
+    @retry_on_locked(max_retries=3, delay=0.5)
     def add_message(self, session_id: int, sender_role: str, sender_id: int, message_text: str) -> int:
         """Add a message to a session"""
         conn = self.get_connection()
