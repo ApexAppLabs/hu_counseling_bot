@@ -308,7 +308,9 @@ async def handle_counselor_bio(update: Update, context: ContextTypes.DEFAULT_TYP
             )
         except Exception as e:
             # Admin might have blocked the bot or doesn't exist
-            pass
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to notify admin {admin_id} about counselor application: {e}")
 
 # ==================== COUNSELOR DASHBOARD ====================
 

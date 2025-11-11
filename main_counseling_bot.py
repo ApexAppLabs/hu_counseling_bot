@@ -4,8 +4,14 @@ Combines all modules and starts the bot
 """
 
 import logging
+import asyncio
 from telegram import BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+
+# Import production-ready modules
+from logging_config import setup_logging
+from session_timeout import SessionTimeoutManager
+from backup_database import backup_database
 
 # Import bot modules
 from hu_counseling_bot import (
@@ -14,7 +20,7 @@ from hu_counseling_bot import (
     accept_session, decline_session, handle_session_message,
     end_session_handler, confirm_end_session,
     session_info_handler, current_session_handler, transfer_session_handler, confirm_transfer_handler,
-    BOT_TOKEN, db, matcher, create_main_menu_keyboard
+    BOT_TOKEN, db, matcher, create_main_menu_keyboard, create_session_control_keyboard
 )
 
 from hu_counseling_bot_part2 import (
@@ -27,10 +33,8 @@ from hu_counseling_bot_part2 import (
     admin_ban_counselor, admin_edit_counselor
 )
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# Setup comprehensive logging with file rotation
+setup_logging(log_level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def main_menu_handler(update, context):
@@ -100,7 +104,7 @@ async def cancel_end_handler(update, context):
     )
 
 async def post_init(application):
-    """Post initialization - Set up bot commands menu"""
+    """Post initialization - Set up bot commands menu and background tasks"""
     bot_commands = [
         BotCommand("start", "🏠 Start the bot / Main menu"),
         BotCommand("menu", "📋 Show main menu"),
@@ -109,12 +113,40 @@ async def post_init(application):
     ]
     await application.bot.set_my_commands(bot_commands)
     logger.info("✅ Bot commands menu configured")
+    
+    # Create initial database backup
+    try:
+        backup_database()
+        logger.info("✅ Initial database backup created")
+    except Exception as e:
+        logger.warning(f"Initial backup failed: {e}")
+    
+    # Start session timeout manager
+    timeout_manager = SessionTimeoutManager(
+        db=db,
+        bot_context=application,
+        timeout_hours=24
+    )
+    application.bot_data['timeout_manager'] = timeout_manager
+    asyncio.create_task(timeout_manager.start())
+    logger.info("✅ Session timeout manager started")
 
 def main():
     """Start the bot"""
     if not BOT_TOKEN:
-        logger.error("BOT_TOKEN not found in environment variables!")
+        logger.error("❌ BOT_TOKEN not found in environment variables!")
+        logger.error("Please create a .env file with BOT_TOKEN=your_bot_token")
         return
+    
+    # Import ADMIN_IDS from hu_counseling_bot to validate
+    from hu_counseling_bot import ADMIN_IDS
+    if not ADMIN_IDS:
+        logger.error("❌ ADMIN_IDS not found or empty in environment variables!")
+        logger.error("Please set ADMIN_IDS in .env file (e.g., ADMIN_IDS=123456789)")
+        logger.error("Without ADMIN_IDS, the admin panel will NOT work!")
+        return
+    
+    logger.info(f"✅ Admin IDs configured: {ADMIN_IDS}")
     
     # Build application
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
