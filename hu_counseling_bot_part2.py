@@ -123,8 +123,8 @@ async def toggle_specialization(update: Update, context: ContextTypes.DEFAULT_TY
             await query.answer("Please select at least 2 areas of expertise.", show_alert=True)
             return
         
-        # Move to bio step
-        await counselor_enter_bio(query, context)
+        # Move to gender selection step
+        await counselor_select_gender(query, context)
         return
     
     # Toggle selection
@@ -152,6 +152,60 @@ Click the icons to select/deselect:
 """
     
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+
+async def counselor_select_gender(query, context: ContextTypes.DEFAULT_TYPE):
+    """Ask counselor to select their gender"""
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import USER_STATE
+    selected = USER_STATE[user_id].get('specializations', [])
+    
+    # Show selected topics
+    topics_text = '\n'.join([f"• {COUNSELING_TOPICS[s]['icon']} {COUNSELING_TOPICS[s]['name']}" 
+                             for s in selected])
+    
+    text = f"""
+**Great! Your expertise:** 👍
+
+{topics_text}
+
+**Select Your Gender** 👤
+
+This helps us provide appropriate guidance and ensures counselees feel comfortable. Your gender will be visible to users when they're matched with you.
+
+**Why we ask:**
+• Some topics require gender-specific advice
+• Users may have preferences for their counselor
+• Helps maintain appropriate boundaries
+
+Choose an option:
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("👨 Male", callback_data='gender_male')],
+        [InlineKeyboardButton("👩 Female", callback_data='gender_female')],
+        [InlineKeyboardButton("🔒 Prefer not to say (Anonymous)", callback_data='gender_anonymous')],
+        [InlineKeyboardButton("◀️ Back", callback_data='counselor_select_spec')]
+    ]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def gender_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle gender selection"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    gender = query.data.replace('gender_', '')
+    
+    from hu_counseling_bot import USER_STATE
+    if user_id not in USER_STATE:
+        USER_STATE[user_id] = {}
+    
+    USER_STATE[user_id]['gender'] = gender
+    
+    # Move to bio step
+    await counselor_enter_bio(query, context)
 
 async def counselor_enter_bio(query, context: ContextTypes.DEFAULT_TYPE):
     """Ask counselor to enter bio"""
@@ -209,9 +263,10 @@ async def handle_counselor_bio(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # Save counselor application
     selected = USER_STATE[user_id].get('specializations', [])
+    gender = USER_STATE[user_id].get('gender', 'anonymous')
     display_name = f"{update.effective_user.first_name or 'Counselor'}"
     
-    counselor_id = db.register_counselor(user_id, display_name, bio, selected)
+    counselor_id = db.register_counselor(user_id, display_name, bio, selected, gender)
     
     # Clear state
     USER_STATE[user_id] = {}
@@ -530,11 +585,19 @@ async def review_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     specs = counselor['specializations']
     spec_text = '\n'.join([f"• {COUNSELING_TOPICS[s]['name']}" for s in specs])
     
+    # Gender display
+    gender_display = {
+        'male': '👨 Male',
+        'female': '👩 Female',
+        'anonymous': '🔒 Anonymous'
+    }.get(counselor.get('gender', 'anonymous'), '🔒 Anonymous')
+    
     text = f"""
 **Counselor Application Review**
 
 **Applicant ID:** {counselor_id}
 **Display Name:** {counselor['display_name']}
+**Gender:** {gender_display}
 **Bio:**
 {counselor['bio']}
 
@@ -921,11 +984,19 @@ async def admin_view_counselor(update: Update, context: ContextTypes.DEFAULT_TYP
     
     avail_status = "🟢 Online" if counselor['is_available'] else "🔴 Offline"
     
+    # Gender display
+    gender_display = {
+        'male': '👨 Male',
+        'female': '👩 Female',
+        'anonymous': '🔒 Anonymous'
+    }.get(counselor.get('gender', 'anonymous'), '🔒 Anonymous')
+    
     text = f"""
 **Counselor Details** 📊
 
 **ID:** {counselor_id}
 **Display Name:** {counselor['display_name']}
+**Gender:** {gender_display}
 **Status:** {status_emoji}
 **Availability:** {avail_status}
 
@@ -1110,7 +1181,7 @@ async def admin_edit_counselor(update: Update, context: ContextTypes.DEFAULT_TYP
 # Export all handler functions
 __all__ = [
     'register_counselor_start', 'counselor_select_specialization', 'toggle_specialization',
-    'handle_counselor_bio', 'counselor_dashboard', 'toggle_availability', 'counselor_stats',
+    'gender_selected', 'handle_counselor_bio', 'counselor_dashboard', 'toggle_availability', 'counselor_stats',
     'rate_session_start', 'submit_rating', 'admin_panel', 'admin_pending_counselors',
     'review_counselor', 'approve_counselor_handler', 'reject_counselor_handler',
     'admin_detailed_stats', 'admin_manage_counselors', 'admin_pending_sessions',

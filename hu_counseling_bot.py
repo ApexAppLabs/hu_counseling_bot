@@ -298,6 +298,59 @@ async def topic_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic_name = topic_data.get('name', topic)
     topic_icon = topic_data.get('icon', '💬')
     
+    # Show gender selection first
+    await user_gender_selection(query, context, topic, topic_name, topic_icon)
+
+async def user_gender_selection(query, context, topic, topic_name, topic_icon):
+    """Ask user to select their gender"""
+    user_id = query.from_user.id
+    
+    text = f"""
+**Topic Selected:** {topic_icon} **{topic_name}**
+
+**Select Your Gender** 👤
+
+This helps us match you with an appropriate counselor and ensures they can provide relevant guidance.
+
+**Your privacy:**
+• Your gender is only shared with your matched counselor
+• Choose "Anonymous" if you prefer not to specify
+• All conversations remain confidential
+
+Choose an option:
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("👨 Male", callback_data=f'user_gender_male')],
+        [InlineKeyboardButton("👩 Female", callback_data=f'user_gender_female')],
+        [InlineKeyboardButton("🔒 Prefer not to say (Anonymous)", callback_data=f'user_gender_anonymous')],
+        [InlineKeyboardButton("◀️ Back", callback_data='request_counseling')]
+    ]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def user_gender_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle user gender selection"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    gender = query.data.replace('user_gender_', '')
+    
+    # Save gender to database
+    db.update_user_gender(user_id, gender)
+    
+    # Store in state
+    if user_id not in USER_STATE:
+        USER_STATE[user_id] = {}
+    USER_STATE[user_id]['gender'] = gender
+    
+    # Get topic from state
+    topic = USER_STATE[user_id].get('topic', 'general')
+    topic_data = COUNSELING_TOPICS.get(topic, {})
+    topic_name = topic_data.get('name', topic)
+    topic_icon = topic_data.get('icon', '💬')
+    
     # For crisis, create session immediately
     if topic == 'crisis':
         text = f"""
@@ -405,6 +458,15 @@ async def create_counseling_session(update: Update, context: ContextTypes.DEFAUL
         # Notify counselor
         desc_preview = description[:100] + "..." if description and len(description) > 100 else (description or "No description provided")
         
+        # Get user's gender
+        user_data = db.get_user(user_id)
+        user_gender = user_data.get('gender', 'anonymous') if user_data else 'anonymous'
+        gender_display = {
+            'male': '👨 Male',
+            'female': '👩 Female',
+            'anonymous': '🔒 Anonymous'
+        }.get(user_gender, '🔒 Anonymous')
+        
         keyboard = [[
             InlineKeyboardButton("✅ Accept Session", callback_data=f'accept_session_{session_id}'),
             InlineKeyboardButton("❌ Decline", callback_data=f'decline_session_{session_id}')
@@ -414,6 +476,7 @@ async def create_counseling_session(update: Update, context: ContextTypes.DEFAUL
             chat_id=counselor_user_id,
             text=f"**🔔 New Counseling Request**\n\n"
                  f"**Topic:** {topic_data['icon']} {topic_data['name']}\n"
+                 f"**User Gender:** {gender_display}\n"
                  f"**Description:** {desc_preview}\n\n"
                  f"Would you like to accept this session?",
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -463,6 +526,15 @@ async def create_counseling_session_from_callback(query, context: ContextTypes.D
         # Notify counselor
         desc_preview = description[:100] + "..." if description and len(description) > 100 else (description or "No description provided")
         
+        # Get user's gender
+        user_data = db.get_user(user_id)
+        user_gender = user_data.get('gender', 'anonymous') if user_data else 'anonymous'
+        gender_display = {
+            'male': '👨 Male',
+            'female': '👩 Female',
+            'anonymous': '🔒 Anonymous'
+        }.get(user_gender, '🔒 Anonymous')
+        
         keyboard = [[
             InlineKeyboardButton("✅ Accept Session", callback_data=f'accept_session_{session_id}'),
             InlineKeyboardButton("❌ Decline", callback_data=f'decline_session_{session_id}')
@@ -472,6 +544,7 @@ async def create_counseling_session_from_callback(query, context: ContextTypes.D
             chat_id=counselor_user_id,
             text=f"**🔔 New Counseling Request**\n\n"
                  f"**Topic:** {topic_data['icon']} {topic_data['name']}\n"
+                 f"**User Gender:** {gender_display}\n"
                  f"**Description:** {desc_preview}\n\n"
                  f"Would you like to accept this session?",
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -523,9 +596,20 @@ async def accept_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Notify counselor
     desc = session.get('description', 'No description provided')
+    
+    # Get user's gender
+    user_data = db.get_user(user_id)
+    user_gender = user_data.get('gender', 'anonymous') if user_data else 'anonymous'
+    gender_display = {
+        'male': '👨 Male',
+        'female': '👩 Female',
+        'anonymous': '🔒 Anonymous'
+    }.get(user_gender, '🔒 Anonymous')
+    
     await query.edit_message_text(
         f"✅ **Session Started!**\n\n"
         f"**Topic:** {topic_data['icon']} {topic_data['name']}\n"
+        f"**User Gender:** {gender_display}\n"
         f"**User's Description:** {desc}\n\n"
         f"*The user can now send messages. Wait for their first message.*",
         reply_markup=create_session_control_keyboard(is_user=False),

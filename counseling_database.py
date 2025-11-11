@@ -124,6 +124,7 @@ class CounselingDatabase:
     def __init__(self, db_path='hu_counseling.db'):
         self.db_path = db_path
         self.init_database()
+        self.migrate_add_gender_column()
     
     def get_connection(self):
         """Get database connection with proper timeout and WAL mode"""
@@ -154,6 +155,7 @@ class CounselingDatabase:
                 username TEXT,
                 first_name TEXT,
                 last_name TEXT,
+                gender TEXT DEFAULT 'anonymous',
                 language_code TEXT DEFAULT 'en',
                 is_banned INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -169,6 +171,7 @@ class CounselingDatabase:
                 user_id INTEGER UNIQUE NOT NULL,
                 display_name TEXT,
                 bio TEXT,
+                gender TEXT DEFAULT 'anonymous',
                 specializations TEXT,
                 status TEXT DEFAULT 'pending',
                 is_available INTEGER DEFAULT 0,
@@ -288,6 +291,41 @@ class CounselingDatabase:
         finally:
             conn.close()
     
+    def migrate_add_gender_column(self):
+        """Add gender column to existing tables if it doesn't exist"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Check if gender column exists in counselors table
+            cursor.execute("PRAGMA table_info(counselors)")
+            counselor_columns = [column[1] for column in cursor.fetchall()]
+            
+            if 'gender' not in counselor_columns:
+                logger.info("Adding gender column to counselors table...")
+                cursor.execute("ALTER TABLE counselors ADD COLUMN gender TEXT DEFAULT 'anonymous'")
+                conn.commit()
+                logger.info("Gender column added to counselors table successfully")
+            else:
+                logger.info("Gender column already exists in counselors table")
+            
+            # Check if gender column exists in users table
+            cursor.execute("PRAGMA table_info(users)")
+            user_columns = [column[1] for column in cursor.fetchall()]
+            
+            if 'gender' not in user_columns:
+                logger.info("Adding gender column to users table...")
+                cursor.execute("ALTER TABLE users ADD COLUMN gender TEXT DEFAULT 'anonymous'")
+                conn.commit()
+                logger.info("Gender column added to users table successfully")
+            else:
+                logger.info("Gender column already exists in users table")
+                
+        except Exception as e:
+            logger.error(f"Error adding gender column: {e}")
+        finally:
+            conn.close()
+    
     # ==================== USER MANAGEMENT ====================
     
     def add_user(self, user_id: int, username: str = None, first_name: str = None, 
@@ -326,6 +364,22 @@ class CounselingDatabase:
         
         return dict(row) if row else None
     
+    def update_user_gender(self, user_id: int, gender: str):
+        """Update user's gender"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE users 
+            SET gender = ?
+            WHERE user_id = ?
+        ''', (gender, user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"User {user_id} gender updated to {gender}")
+    
     def is_user_banned(self, user_id: int) -> bool:
         """Check if user is banned"""
         conn = self.get_connection()
@@ -340,7 +394,7 @@ class CounselingDatabase:
     # ==================== COUNSELOR MANAGEMENT ====================
     
     def register_counselor(self, user_id: int, display_name: str, bio: str, 
-                          specializations: List[str]) -> int:
+                          specializations: List[str], gender: str = 'anonymous') -> int:
         """Register a new counselor (pending approval)"""
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -348,14 +402,15 @@ class CounselingDatabase:
         spec_json = json.dumps(specializations)
         
         cursor.execute('''
-            INSERT INTO counselors (user_id, display_name, bio, specializations, status)
-            VALUES (?, ?, ?, ?, 'pending')
-        ''', (user_id, display_name, bio, spec_json))
+            INSERT INTO counselors (user_id, display_name, bio, gender, specializations, status)
+            VALUES (?, ?, ?, ?, ?, 'pending')
+        ''', (user_id, display_name, bio, gender, spec_json))
         
         counselor_id = cursor.lastrowid
         conn.commit()
         conn.close()
         
+        logger.info(f"Counselor registered: user_id={user_id}, gender={gender}")
         return counselor_id
     
     def approve_counselor(self, counselor_id: int, admin_id: int):

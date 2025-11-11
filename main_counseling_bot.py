@@ -10,7 +10,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 # Import bot modules
 from hu_counseling_bot import (
     start, help_command, about_command,
-    request_counseling, topic_selected, handle_description, skip_description,
+    request_counseling, topic_selected, user_gender_selected, handle_description, skip_description,
     accept_session, decline_session, handle_session_message,
     end_session_handler, confirm_end_session,
     session_info_handler, current_session_handler, transfer_session_handler, confirm_transfer_handler,
@@ -19,7 +19,7 @@ from hu_counseling_bot import (
 
 from hu_counseling_bot_part2 import (
     register_counselor_start, counselor_select_specialization, toggle_specialization,
-    handle_counselor_bio, counselor_dashboard, toggle_availability, counselor_stats,
+    gender_selected, handle_counselor_bio, counselor_dashboard, toggle_availability, counselor_stats,
     rate_session_start, submit_rating, admin_panel, admin_pending_counselors,
     review_counselor, approve_counselor_handler, reject_counselor_handler,
     admin_detailed_stats, admin_manage_counselors, admin_pending_sessions,
@@ -133,6 +133,7 @@ def main():
     # Counseling request flow
     app.add_handler(CallbackQueryHandler(request_counseling, pattern='^request_counseling$'))
     app.add_handler(CallbackQueryHandler(topic_selected, pattern='^topic_'))
+    app.add_handler(CallbackQueryHandler(user_gender_selected, pattern='^user_gender_'))
     app.add_handler(CallbackQueryHandler(skip_description, pattern='^skip_description$'))
     
     # Session management
@@ -150,6 +151,7 @@ def main():
     app.add_handler(CallbackQueryHandler(register_counselor_start, pattern='^register_counselor$'))
     app.add_handler(CallbackQueryHandler(counselor_select_specialization, pattern='^counselor_select_spec$'))
     app.add_handler(CallbackQueryHandler(toggle_specialization, pattern='^spec_'))
+    app.add_handler(CallbackQueryHandler(gender_selected, pattern='^gender_'))
     
     # Counselor dashboard
     app.add_handler(CallbackQueryHandler(counselor_dashboard, pattern='^counselor_dashboard$'))
