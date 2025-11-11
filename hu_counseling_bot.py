@@ -565,13 +565,53 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
     message_text = update.message.text
     
+    logger.info(f"📨 Message received from user_id: {user_id}, text: {message_text[:50] if message_text else 'None'}...")
+    
     if not message_text:
+        logger.warning(f"Empty message from user {user_id}, ignoring")
         return
     
-    # Check if user is in an active session
+    # IMPORTANT: Check counselor FIRST before user
+    # This prevents counselors from matching as users in their own sessions
+    logger.info(f"🔍 Checking if user {user_id} is a counselor...")
+    counselor = db.get_counselor_by_user_id(user_id)
+    
+    if counselor and counselor.get('status') == 'approved':
+        logger.info(f"✅ User {user_id} IS counselor {counselor['counselor_id']}, status: approved")
+        session = db.get_active_session_by_counselor(counselor['counselor_id'])
+        
+        if session:
+            logger.info(f"✅ Counselor {counselor['counselor_id']} has active session {session['session_id']}")
+            
+            # Counselor is sending a message
+            session_id = session['session_id']
+            client_user_id = session['user_id']
+            
+            logger.info(f"📤 Preparing to send counselor message to user {client_user_id}")
+            
+            # Save message
+            db.add_message(session_id, 'counselor', user_id, message_text)
+            logger.info(f"💾 Message saved to database")
+            
+            # Forward to user with anonymous display name
+            try:
+                await context.bot.send_message(
+                    chat_id=client_user_id,
+                    text=f"**👨‍⚕️ Anonymous Counselor #{counselor['counselor_id']}:** {message_text}",
+                    parse_mode='Markdown'
+                )
+                logger.info(f"✅ SUCCESS! Counselor {counselor['counselor_id']} message sent to user {client_user_id}")
+            except Exception as e:
+                logger.error(f"❌ ERROR sending counselor message: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+            return
+    
+    # Now check if user is in an active session (as a regular user, not counselor)
     session = db.get_active_session_by_user(user_id)
     if session:
         # User is sending a message
+        logger.info(f"✅ User {user_id} is in active session {session['session_id']}")
         session_id = session['session_id']
         counselor = db.get_counselor(session['counselor_id'])
         counselor_user_id = counselor['user_id']
@@ -586,34 +626,17 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
                 text=f"**💬 Anonymous User #{user_id % 10000}:** {message_text}",
                 parse_mode='Markdown'
             )
-            logger.info(f"User {user_id} sent message to counselor {counselor_user_id}")
+            logger.info(f"✅ User {user_id} sent message to counselor {counselor_user_id}")
         except Exception as e:
-            logger.error(f"Error sending user message: {e}")
+            logger.error(f"❌ Error sending user message: {e}")
         return
     
-    # Check if user is a counselor in an active session
-    counselor = db.get_counselor_by_user_id(user_id)
-    if counselor and counselor.get('status') == 'approved':
-        session = db.get_active_session_by_counselor(counselor['counselor_id'])
-        if session:
-            # Counselor is sending a message
-            session_id = session['session_id']
-            client_user_id = session['user_id']
-            
-            # Save message
-            db.add_message(session_id, 'counselor', user_id, message_text)
-            
-            # Forward to user with anonymous display name
-            try:
-                await context.bot.send_message(
-                    chat_id=client_user_id,
-                    text=f"**👨‍⚕️ Anonymous Counselor #{counselor['counselor_id']}:** {message_text}",
-                    parse_mode='Markdown'
-                )
-                logger.info(f"Counselor {counselor['counselor_id']} sent message to user {client_user_id}")
-            except Exception as e:
-                logger.error(f"Error sending counselor message: {e}")
-            return
+    # No active session found as either user or counselor
+    if counselor:
+        logger.warning(f"❌ Counselor {counselor['counselor_id']} has NO active session")
+    else:
+        logger.warning(f"❌ User {user_id} is NOT a counselor and has no active session as user")
+    return
 
 async def end_session_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle end session request"""
