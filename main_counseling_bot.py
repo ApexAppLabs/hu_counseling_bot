@@ -83,8 +83,17 @@ async def cancel_end_handler(update, context):
     query = update.callback_query
     await query.answer("Continuing session")
     
+    user_id = query.from_user.id
+    
+    # Check if user or counselor
+    is_counselor = False
+    counselor = db.get_counselor_by_user_id(user_id)
+    if counselor and counselor.get('status') == 'approved':
+        is_counselor = True
+    
     await query.edit_message_text(
-        "✅ Session continues.\n\nType your message below:",
+        "✅ **Session Continues**\n\nType your message below to continue the conversation:",
+        reply_markup=create_session_control_keyboard(is_user=not is_counselor),
         parse_mode='Markdown'
     )
 

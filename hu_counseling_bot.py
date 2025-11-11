@@ -639,81 +639,156 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
     return
 
 async def end_session_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle end session request"""
+    """Handle end session request - works for requested, matched, or active sessions"""
     query = update.callback_query
     await query.answer()
     
     user_id = query.from_user.id
     
-    # Find active session
-    session = db.get_active_session_by_user(user_id)
+    # Find ANY session (requested, matched, or active)
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    
+    # Check as user
+    cursor.execute('''
+        SELECT * FROM counseling_sessions 
+        WHERE user_id = ? AND status IN ('requested', 'matched', 'active')
+        ORDER BY created_at DESC LIMIT 1
+    ''', (user_id,))
+    session = cursor.fetchone()
+    
+    is_counselor = False
     if not session:
         # Check if counselor
         counselor = db.get_counselor_by_user_id(user_id)
         if counselor:
-            session = db.get_active_session_by_counselor(counselor['counselor_id'])
+            cursor.execute('''
+                SELECT * FROM counseling_sessions 
+                WHERE counselor_id = ? AND status IN ('matched', 'active')
+                ORDER BY created_at DESC LIMIT 1
+            ''', (counselor['counselor_id'],))
+            session = cursor.fetchone()
+            is_counselor = True
+    
+    conn.close()
     
     if not session:
         await query.edit_message_text("⚠️ You don't have an active session.")
         return
     
+    session = dict(session)
     session_id = session['session_id']
+    status = session['status']
+    
+    # Different messages based on status
+    if status == 'requested':
+        message = "**Cancel your counseling request?**\n\nYou're still waiting for a counselor. Do you want to cancel?"
+    elif status == 'matched':
+        message = "**Cancel this session?**\n\nA counselor has been matched but hasn't accepted yet. Cancel the request?"
+    else:
+        message = "**Are you sure you want to end this session?**\n\nThe conversation will be closed for both parties."
     
     # Confirm end session
     keyboard = [[
-        InlineKeyboardButton("✅ Yes, End Session", callback_data=f'confirm_end_{session_id}'),
+        InlineKeyboardButton("✅ Yes, End/Cancel", callback_data=f'confirm_end_{session_id}'),
         InlineKeyboardButton("❌ No, Continue", callback_data='cancel_end')
     ]]
     
     await query.edit_message_text(
-        "**Are you sure you want to end this session?**\n\n"
-        "The conversation will be closed for both parties.",
+        message,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
 
 async def confirm_end_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirm and end the session"""
+    """Confirm and end/cancel the session - handles all statuses"""
     query = update.callback_query
     await query.answer()
     
     session_id = int(query.data.replace('confirm_end_', ''))
     session = db.get_session(session_id)
     
-    if not session or session['status'] != 'active':
+    if not session or session['status'] in ('completed', 'cancelled'):
         await query.edit_message_text("⚠️ This session has already ended.")
         return
     
-    # End the session
-    db.end_session(session_id, 'user_ended')
-    
+    status = session['status']
     user_id = session['user_id']
-    counselor = db.get_counselor(session['counselor_id'])
-    counselor_user_id = counselor['user_id']
     
-    # Notify user
-    await context.bot.send_message(
-        chat_id=user_id,
-        text="**Session Ended**\n\n"
-             "Thank you for using HU Counseling Service.\n\n"
-             "**Would you like to rate this session?**",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("⭐ Rate Session", callback_data=f'rate_session_{session_id}'),
-            InlineKeyboardButton("⏭️ Skip", callback_data='main_menu')
-        ]]),
-        parse_mode='Markdown'
-    )
-    
-    # Notify counselor
-    await context.bot.send_message(
-        chat_id=counselor_user_id,
-        text="**Session Ended**\n\n"
-             "The user has ended the session. Great work! 🙏",
-        reply_markup=create_main_menu_keyboard(is_counselor=True),
-        parse_mode='Markdown'
-    )
-    
-    await query.edit_message_text("✅ Session ended successfully.")
+    # Handle based on status
+    if status == 'requested':
+        # Just waiting for matching - simply cancel
+        db.end_session(session_id, 'user_cancelled')
+        
+        await query.edit_message_text(
+            "✅ **Request Cancelled**\n\n"
+            "Your counseling request has been cancelled.\n\n"
+            "Feel free to request counseling again anytime you need support. 🙏",
+            reply_markup=create_main_menu_keyboard(is_counselor=False),
+            parse_mode='Markdown'
+        )
+        logger.info(f"User {user_id} cancelled requested session {session_id}")
+        
+    elif status == 'matched':
+        # Counselor matched but hasn't accepted - cancel and notify counselor
+        db.end_session(session_id, 'user_cancelled')
+        
+        counselor = db.get_counselor(session['counselor_id'])
+        counselor_user_id = counselor['user_id']
+        
+        # Notify counselor
+        try:
+            await context.bot.send_message(
+                chat_id=counselor_user_id,
+                text="⚠️ **Session Cancelled**\n\n"
+                     "The user has cancelled their counseling request before you could accept.\n\n"
+                     "No action needed from you.",
+                reply_markup=create_main_menu_keyboard(is_counselor=True),
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Error notifying counselor of cancellation: {e}")
+        
+        await query.edit_message_text(
+            "✅ **Request Cancelled**\n\n"
+            "Your counseling request has been cancelled.\n\n"
+            "Feel free to request counseling again anytime. 🙏",
+            reply_markup=create_main_menu_keyboard(is_counselor=False),
+            parse_mode='Markdown'
+        )
+        logger.info(f"User {user_id} cancelled matched session {session_id}")
+        
+    else:  # status == 'active'
+        # Active session - end normally with rating
+        db.end_session(session_id, 'user_ended')
+        
+        counselor = db.get_counselor(session['counselor_id'])
+        counselor_user_id = counselor['user_id']
+        
+        # Notify user with rating option
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="**Session Ended**\n\n"
+                 "Thank you for using HU Counseling Service.\n\n"
+                 "**Would you like to rate this session?**",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⭐ Rate Session", callback_data=f'rate_session_{session_id}'),
+                InlineKeyboardButton("⏭️ Skip", callback_data='main_menu')
+            ]]),
+            parse_mode='Markdown'
+        )
+        
+        # Notify counselor
+        await context.bot.send_message(
+            chat_id=counselor_user_id,
+            text="**Session Ended**\n\n"
+                 "The user has ended the session. Great work! 🙏",
+            reply_markup=create_main_menu_keyboard(is_counselor=True),
+            parse_mode='Markdown'
+        )
+        
+        await query.edit_message_text("✅ Session ended successfully.")
+        logger.info(f"User {user_id} ended active session {session_id}")
 
 # ==================== ADDITIONAL SESSION HANDLERS ====================
 
