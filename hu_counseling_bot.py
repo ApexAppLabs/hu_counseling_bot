@@ -580,16 +580,20 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
         db.add_message(session_id, 'user', user_id, message_text)
         
         # Forward to counselor with anonymous display name
-        await context.bot.send_message(
-            chat_id=counselor_user_id,
-            text=f"**💬 Anonymous User #{user_id % 10000}:** {message_text}",
-            parse_mode='Markdown'
-        )
+        try:
+            await context.bot.send_message(
+                chat_id=counselor_user_id,
+                text=f"**💬 Anonymous User #{user_id % 10000}:** {message_text}",
+                parse_mode='Markdown'
+            )
+            logger.info(f"User {user_id} sent message to counselor {counselor_user_id}")
+        except Exception as e:
+            logger.error(f"Error sending user message: {e}")
         return
     
     # Check if user is a counselor in an active session
     counselor = db.get_counselor_by_user_id(user_id)
-    if counselor:
+    if counselor and counselor.get('status') == 'approved':
         session = db.get_active_session_by_counselor(counselor['counselor_id'])
         if session:
             # Counselor is sending a message
@@ -600,11 +604,15 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
             db.add_message(session_id, 'counselor', user_id, message_text)
             
             # Forward to user with anonymous display name
-            await context.bot.send_message(
-                chat_id=client_user_id,
-                text=f"**👨‍⚕️ Anonymous Counselor #{counselor['counselor_id']}:** {message_text}",
-                parse_mode='Markdown'
-            )
+            try:
+                await context.bot.send_message(
+                    chat_id=client_user_id,
+                    text=f"**👨‍⚕️ Anonymous Counselor #{counselor['counselor_id']}:** {message_text}",
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Counselor {counselor['counselor_id']} sent message to user {client_user_id}")
+            except Exception as e:
+                logger.error(f"Error sending counselor message: {e}")
             return
 
 async def end_session_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
