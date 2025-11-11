@@ -623,10 +623,171 @@ async def reject_counselor_handler(update: Update, context: ContextTypes.DEFAULT
         parse_mode='Markdown'
     )
 
+# ==================== ADDITIONAL ADMIN HANDLERS ====================
+
+async def admin_detailed_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show detailed system statistics"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import db, ADMIN_IDS
+    if not db.is_admin(user_id) and user_id not in ADMIN_IDS:
+        await query.answer("⚠️ You don't have admin access.", show_alert=True)
+        return
+    
+    stats = db.get_bot_stats()
+    
+    # Get topic distribution
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    
+    # Top topics
+    cursor.execute('''
+        SELECT topic, COUNT(*) as count 
+        FROM counseling_sessions 
+        GROUP BY topic 
+        ORDER BY count DESC 
+        LIMIT 5
+    ''')
+    top_topics = cursor.fetchall()
+    
+    # Average rating
+    cursor.execute('''
+        SELECT AVG(CAST(rating_sum AS FLOAT) / NULLIF(rating_count, 0)) as avg_rating
+        FROM counselors 
+        WHERE rating_count > 0
+    ''')
+    avg_rating_row = cursor.fetchone()
+    avg_rating = avg_rating_row['avg_rating'] if avg_rating_row['avg_rating'] else 0
+    
+    conn.close()
+    
+    topics_text = '\n'.join([f"• {COUNSELING_TOPICS.get(row['topic'], {}).get('name', row['topic'])}: {row['count']}" 
+                             for row in top_topics])
+    
+    text = f"""
+**Detailed System Statistics** 📊
+
+**Users & Counselors:**
+👥 Total Users: {stats.get('total_users', 0)}
+👨‍⚕️ Total Counselors: {stats.get('total_counselors', 0)}
+🟢 Active Counselors: {stats.get('active_counselors', 0)}
+✅ Approved: {stats.get('total_counselors', 0) - len(db.get_pending_counselors())}
+⏳ Pending: {len(db.get_pending_counselors())}
+
+**Sessions:**
+📊 Total: {stats.get('total_sessions', 0)}
+🔄 Active: {stats.get('active_sessions', 0)}
+✅ Completed: {stats.get('completed_sessions', 0)}
+⏳ Pending: {stats.get('pending_sessions', 0)}
+
+**Quality Metrics:**
+⭐ Average Rating: {avg_rating:.2f}/5.0
+
+**Top 5 Topics:**
+{topics_text if topics_text else '• No data yet'}
+
+**System Health:** ✅ Operational
+"""
+    
+    keyboard = [[InlineKeyboardButton("◀️ Back to Admin Panel", callback_data='admin_panel')]]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def admin_manage_counselors(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Manage all counselors"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import db, ADMIN_IDS
+    if not db.is_admin(user_id) and user_id not in ADMIN_IDS:
+        await query.answer("⚠️ You don't have admin access.", show_alert=True)
+        return
+    
+    # Get all counselors
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT counselor_id, display_name, status, is_available, total_sessions
+        FROM counselors 
+        ORDER BY status, counselor_id
+        LIMIT 10
+    ''')
+    counselors = cursor.fetchall()
+    conn.close()
+    
+    if not counselors:
+        text = "**Counselor Management** 👥\n\nNo counselors in the system yet."
+        keyboard = [[InlineKeyboardButton("◀️ Back", callback_data='admin_panel')]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        return
+    
+    text = "**Counselor Management** 👥\n\n"
+    
+    for c in counselors[:10]:
+        status_emoji = {"approved": "✅", "pending": "⏳", "rejected": "❌"}.get(c['status'], "❓")
+        avail_emoji = "🟢" if c['is_available'] else "🔴"
+        text += f"{status_emoji} **{c['display_name']}** (ID: {c['counselor_id']})\n"
+        text += f"   Status: {c['status'].title()} | {avail_emoji} | Sessions: {c['total_sessions']}\n\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("📋 View Pending Applications", callback_data='admin_pending_counselors')],
+        [InlineKeyboardButton("🔄 Refresh List", callback_data='admin_manage_counselors')],
+        [InlineKeyboardButton("◀️ Back", callback_data='admin_panel')]
+    ]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def admin_pending_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """View pending counseling sessions"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import db, ADMIN_IDS
+    if not db.is_admin(user_id) and user_id not in ADMIN_IDS:
+        await query.answer("⚠️ You don't have admin access.", show_alert=True)
+        return
+    
+    pending = db.get_pending_sessions(limit=10)
+    
+    if not pending:
+        text = "**Pending Sessions** 🔔\n\nNo pending sessions waiting for counselors."
+        keyboard = [[InlineKeyboardButton("◀️ Back", callback_data='admin_panel')]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        return
+    
+    text = f"**Pending Sessions** 🔔\n\nThere are **{len(pending)}** sessions waiting for counselors:\n\n"
+    
+    for session in pending[:5]:
+        topic_data = COUNSELING_TOPICS.get(session['topic'], {})
+        text += f"**Session #{session['session_id']}**\n"
+        text += f"Topic: {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}\n"
+        text += f"Requested: {session.get('created_at', 'Unknown')}\n"
+        text += f"Description: {session.get('description', 'No description')[:50]}...\n\n"
+    
+    if len(pending) > 5:
+        text += f"\n*...and {len(pending) - 5} more sessions*"
+    
+    text += "\n\n💡 **Note:** These sessions are waiting for available counselors to come online."
+    
+    keyboard = [
+        [InlineKeyboardButton("🔄 Refresh", callback_data='admin_pending_sessions')],
+        [InlineKeyboardButton("◀️ Back", callback_data='admin_panel')]
+    ]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
 # Export all handler functions
 __all__ = [
     'register_counselor_start', 'counselor_select_specialization', 'toggle_specialization',
     'handle_counselor_bio', 'counselor_dashboard', 'toggle_availability', 'counselor_stats',
     'rate_session_start', 'submit_rating', 'admin_panel', 'admin_pending_counselors',
-    'review_counselor', 'approve_counselor_handler', 'reject_counselor_handler'
+    'review_counselor', 'approve_counselor_handler', 'reject_counselor_handler',
+    'admin_detailed_stats', 'admin_manage_counselors', 'admin_pending_sessions'
 ]
