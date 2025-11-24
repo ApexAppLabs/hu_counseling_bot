@@ -824,7 +824,7 @@ async def confirm_end_session(update: Update, context: ContextTypes.DEFAULT_TYPE
     session_id = int(query.data.replace('confirm_end_', ''))
     session = db.get_session(session_id)
     
-    if not session or session['status'] in ('completed', 'cancelled'):
+    if not session or session['status'] == 'ended':
         await query.edit_message_text("⚠️ This session has already ended.")
         return
     

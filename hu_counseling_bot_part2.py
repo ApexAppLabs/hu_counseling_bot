@@ -746,8 +746,8 @@ async def admin_detailed_stats(update: Update, context: ContextTypes.DEFAULT_TYP
     cursor.execute("SELECT COUNT(*) as count FROM counseling_sessions WHERE status = 'active'")
     active_sessions = cursor.fetchone()['count']
     
-    # Completed sessions
-    cursor.execute("SELECT COUNT(*) as count FROM counseling_sessions WHERE status IN ('completed', 'ended')")
+    # Completed/ended sessions
+    cursor.execute("SELECT COUNT(*) as count FROM counseling_sessions WHERE status = 'ended'")
     completed_sessions = cursor.fetchone()['count']
     
     # Pending sessions (waiting for counselor)

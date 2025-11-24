@@ -20,7 +20,8 @@ from hu_counseling_bot import (
     accept_session, decline_session, handle_session_message,
     end_session_handler, confirm_end_session,
     session_info_handler, current_session_handler, transfer_session_handler, confirm_transfer_handler,
-    BOT_TOKEN, db, matcher, create_main_menu_keyboard, create_session_control_keyboard
+    BOT_TOKEN, db, matcher, create_main_menu_keyboard, create_session_control_keyboard,
+    ADMIN_IDS
 )
 
 from hu_counseling_bot_part2 import (
@@ -49,7 +50,7 @@ async def main_menu_handler(update, context):
     is_counselor = counselor and counselor['status'] == 'approved'
     
     # Check admin status
-    is_admin = db.is_admin(user_id)
+    is_admin = db.is_admin(user_id) or user_id in ADMIN_IDS
     
     text = """
 **HU Counseling Service** 🙏
@@ -71,7 +72,7 @@ async def menu_command(update, context):
     is_counselor = counselor and counselor['status'] == 'approved'
     
     # Check admin status
-    is_admin = db.is_admin(user_id)
+    is_admin = db.is_admin(user_id) or user_id in ADMIN_IDS
     
     text = """
 **HU Counseling Service** 🙏
