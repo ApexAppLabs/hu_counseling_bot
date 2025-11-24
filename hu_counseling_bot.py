@@ -685,7 +685,7 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 await context.bot.send_message(
                     chat_id=client_user_id,
-                    text=f"**👨‍⚕️ Anonymous Counselor #{counselor['counselor_id']}:** {message_text}",
+                    text=f"Counselor #{counselor['counselor_id']}\n\n{message_text}",
                     parse_mode='Markdown'
                 )
                 logger.info(f"✅ SUCCESS! Counselor {counselor['counselor_id']} message sent to user {client_user_id}")
@@ -723,7 +723,7 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
         try:
             await context.bot.send_message(
                 chat_id=counselor_user_id,
-                text=f"**💬 Anonymous User #{user_id % 10000}:** {message_text}",
+                text=f"User #{user_id % 10000}\n\n{message_text}",
                 parse_mode='Markdown'
             )
             logger.info(f"✅ User {user_id} sent message to counselor {counselor_user_id}")
