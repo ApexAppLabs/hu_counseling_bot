@@ -193,10 +193,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Accept or decline session requests
 
 **Important:**
-🆘 If you're in crisis or having suicidal thoughts, please select "Crisis & Emergency" or contact:
-• National Suicide Prevention: 988
-• Crisis Text Line: Text HOME to 741741
-• Emergency Services: 911
+🆘 If you're in crisis or having suicidal thoughts, please select "Crisis & Emergency" to be prioritized for support.
+If you are in immediate danger, please seek help offline as well:
+• Go to the nearest clinic, hospital, or health centre
+• Reach out to a trusted person (friend, family, fellowship leader, or university staff)
+• Contact local emergency services or campus security in your area
 
 **Contact Admin:**
 If you have issues, contact the administrators.
@@ -358,12 +359,12 @@ async def user_gender_selected(update: Update, context: ContextTypes.DEFAULT_TYP
 
 You've selected: {topic_icon} **{topic_name}**
 
-⚠️ **If you are in immediate danger, please call 911 or go to the nearest emergency room.**
+⚠️ **If you are in immediate danger or feel you might harm yourself or someone else, please seek help around you immediately.**
 
-**Crisis Resources:**
-• National Suicide Prevention: 988
-• Crisis Text Line: Text HOME to 741741
-• Trevor Project (LGBTQ): 1-866-488-7386
+You can:
+• Go to the nearest clinic, hospital, or health centre
+• Reach out to a trusted friend, family member, or fellowship leader nearby
+• Contact your university clinic, counseling office, or campus security
 
 We're connecting you with a counselor right now. If you'd like, you can briefly describe your situation while we find someone:
 
@@ -694,9 +695,21 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
     # Now check if user is in an active session (as a regular user, not counselor)
     session = db.get_active_session_by_user(user_id)
     if session:
-        # User is sending a message
-        logger.info(f"✅ User {user_id} is in active session {session['session_id']}")
+        status = session.get('status')
         session_id = session['session_id']
+
+        # If session is not yet active (requested or matched), block messaging
+        if status != 'active':
+            logger.info(f"⏳ User {user_id} tried to send message in non-active session {session_id} (status={status})")
+            await update.message.reply_text(
+                "⏳ Your counseling request has been sent.\n\n"
+                "Please wait until a counselor accepts your request before sending messages.",
+                parse_mode='Markdown'
+            )
+            return
+
+        # User is sending a message in an active session
+        logger.info(f"✅ User {user_id} is in active session {session_id}")
         counselor = db.get_counselor(session['counselor_id'])
         counselor_user_id = counselor['user_id']
         
