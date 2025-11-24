@@ -259,11 +259,11 @@ async def request_counseling(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     user_id = query.from_user.id
     
-    # Check if user already has an active session
+    # Check if user already has a pending or active session
     active_session = db.get_active_session_by_user(user_id)
     if active_session:
         await query.edit_message_text(
-            "⚠️ You already have an active counseling session.\n\n"
+            "⚠️ You already have a pending or active counseling request.\n\n"
             "Please complete or end your current session before requesting a new one.",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("📱 Go to Current Session", callback_data='current_session')
@@ -366,8 +366,8 @@ You've selected: {topic_icon} **{topic_name}**
 
 You can:
 • Go to the nearest clinic, hospital, or health centre
-• Reach out to a trusted friend, family member, or fellowship leader nearby
-• Contact your university clinic, counseling office, or campus security
+• Reach out to a trusted person (friend, family, fellowship leader, or university staff)
+• Contact local emergency services or campus security in your area
 
 We're connecting you with a counselor right now. If you'd like, you can briefly describe your situation while we find someone:
 
@@ -505,7 +505,13 @@ async def create_counseling_session_from_callback(query, context: ContextTypes.D
     state = USER_STATE.get(user_id, {})
     topic = state.get('topic')
     description = state.get('description')
-    
+
+    # Validate topic before creating session
+    if not topic:
+        await query.edit_message_text("⚠️ Please start over by requesting counseling.")
+        USER_STATE[user_id] = {}
+        return
+
     # Create session in database
     session_id = db.create_session_request(user_id, topic, description)
     
@@ -669,9 +675,19 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
         session = db.get_active_session_by_counselor(counselor['counselor_id'])
         
         if session:
-            logger.info(f"✅ Counselor {counselor['counselor_id']} has active session {session['session_id']}")
-            
-            # Counselor is sending a message
+            status = session.get('status')
+            logger.info(f"✅ Counselor {counselor['counselor_id']} has current session {session['session_id']} (status={status})")
+
+            # Only allow messaging in active sessions
+            if status != 'active':
+                await update.message.reply_text(
+                    "⚠️ This session has not started yet.\n\n"
+                    "Please accept the session from the request message before sending messages to the user.",
+                    parse_mode='Markdown'
+                )
+                return
+
+            # Counselor is sending a message in an active session
             session_id = session['session_id']
             client_user_id = session['user_id']
             

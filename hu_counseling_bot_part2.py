@@ -95,7 +95,7 @@ Choose the topics you feel equipped to counsel on. Select at least 2 areas.
 
 💡 *Tip: Only choose areas where you have personal experience or strong biblical knowledge.*
 
-Click the icons to select/deselect:
+Click the topics to select/deselect:
 """
     
     keyboard = create_counselor_specialization_keyboard(selected)
@@ -148,7 +148,7 @@ async def toggle_specialization(update: Update, context: ContextTypes.DEFAULT_TY
 
 Choose the topics you feel equipped to counsel on. Select at least 2 areas.
 
-Click the icons to select/deselect:
+Click the topics to select/deselect:
 """
     
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
@@ -171,7 +171,7 @@ async def counselor_select_gender(query, context: ContextTypes.DEFAULT_TYPE):
 
 **Select Your Gender** 👤
 
-This helps us provide appropriate guidance and ensures counselees feel comfortable. Your gender will be visible to users when they're matched with you.
+This helps us provide appropriate guidance and matching. Your gender is stored for admin and matching purposes and is not shown directly to users.
 
 **Why we ask:**
 • Some topics require gender-specific advice
@@ -396,11 +396,11 @@ async def toggle_availability(update: Update, context: ContextTypes.DEFAULT_TYPE
     current_status = counselor['is_available'] == 1
     new_status = not current_status
     
-    # Check if has active session
-    if current_status and new_status == False:
+    # Check if has any pending or active session
+    if current_status and new_status is False:
         active_session = db.get_active_session_by_counselor(counselor_id)
         if active_session:
-            await query.answer("You cannot go offline while in an active session!", show_alert=True)
+            await query.answer("You cannot go offline while you have a pending or active session!", show_alert=True)
             return
     
     db.set_counselor_availability(counselor_id, new_status)

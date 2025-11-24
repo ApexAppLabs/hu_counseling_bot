@@ -255,11 +255,13 @@ This bot is designed for the student gospel fellowship community. Contributions 
 
 ## 🆘 Support & Resources
 
-### Crisis Resources
-- **National Suicide Prevention:** 988
-- **Crisis Text Line:** Text HOME to 741741
-- **Trevor Project (LGBTQ):** 1-866-488-7386
-- **Emergency Services:** 911
+### Crisis Guidance
+If you are in immediate danger or feel you might harm yourself or someone else, please seek help around you immediately:
+
+- Go to the nearest clinic, hospital, or health centre
+- Reach out to a trusted friend, family member, fellowship leader, or university staff
+- Contact your university clinic, counseling office, or campus security
+- Use any available local emergency numbers in your area
 
 ### Technical Support
 - Check logs for errors

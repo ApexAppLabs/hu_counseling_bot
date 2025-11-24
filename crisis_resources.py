@@ -7,12 +7,19 @@ Customize these resources for your region/country
 CRISIS_RESOURCES = {
     'default': {
         'hotlines': [
-            {'name': 'National Suicide Prevention', 'number': '988', 'region': 'US'},
-            {'name': 'Crisis Text Line', 'number': 'Text HOME to 741741', 'region': 'US'},
-            {'name': 'Trevor Project (LGBTQ)', 'number': '1-866-488-7386', 'region': 'US'},
+            {
+                'name': 'Local crisis support',
+                'number': 'Contact your university clinic, counseling office, or local health centre',
+                'region': 'Local',
+            },
+            {
+                'name': 'Trusted people around you',
+                'number': 'Reach out to a close friend, family member, fellowship leader, or university staff',
+                'region': 'Local',
+            },
         ],
-        'emergency': '911',
-        'additional_text': 'If you are in immediate danger, please call emergency services or go to the nearest emergency room.'
+        'emergency': 'Local emergency services / campus security',
+        'additional_text': 'If you are in immediate danger or feel you might harm yourself or someone else, please seek help around you immediately (nearby people, university clinic, health centre, hospital, or campus security).'
     },
     
     # Add your region-specific resources here
