@@ -37,9 +37,28 @@ def run_bot():
     """Run the bot in this thread"""
     try:
         logger.info("Starting Telegram bot in background thread...")
+        
+        # Check environment variables first
+        bot_token = os.getenv('BOT_TOKEN')
+        admin_ids = os.getenv('ADMIN_IDS')
+        
+        if not bot_token:
+            logger.error("❌ BOT_TOKEN not found in environment variables!")
+            return
+        
+        if not admin_ids:
+            logger.error("❌ ADMIN_IDS not found in environment variables!")
+            return
+            
+        logger.info(f"✅ BOT_TOKEN found (length: {len(bot_token)})")
+        logger.info(f"✅ ADMIN_IDS found: {admin_ids}")
+        
         # Import and run bot
+        logger.info("Importing bot modules...")
         from main_counseling_bot import main as bot_main
+        logger.info("Bot modules imported successfully. Starting bot...")
         bot_main()
+        
     except Exception as e:
         logger.error(f"Bot crashed: {e}")
         import traceback
