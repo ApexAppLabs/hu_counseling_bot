@@ -1,0 +1,230 @@
+╔════════════════════════════════════════════════════════════════╗
+║         KOYEB DEPLOYMENT CHECKLIST - Follow This Order        ║
+╚════════════════════════════════════════════════════════════════╝
+
+📋 PRE-DEPLOYMENT
+─────────────────────────────────────────────────────────────────
+[ ] Get BOT_TOKEN from @BotFather on Telegram
+    → /newbot → Follow instructions → Copy token
+
+[ ] Get YOUR_USER_ID from @userinfobot on Telegram
+    → /start → Copy your ID number
+
+[ ] Verify .env is NOT committed to Git
+    → Run: git status
+    → .env should NOT appear in the list
+    → If it does, DO NOT COMMIT! It's private!
+
+[ ] Push code to GitHub
+    → git add .
+    → git commit -m "Ready for deployment"
+    → git push origin main
+
+
+🚀 KOYEB SETUP
+─────────────────────────────────────────────────────────────────
+[ ] Go to https://www.koyeb.com
+
+[ ] Sign up (GitHub login recommended)
+
+[ ] Click "Create App"
+
+[ ] Select "Deploy from GitHub"
+
+[ ] Connect your GitHub account
+
+[ ] Select "counseling_bot" repository
+
+
+⚙️ CONFIGURATION
+─────────────────────────────────────────────────────────────────
+[ ] Build command: pip install -r requirements.txt
+
+[ ] Run command: python main_counseling_bot.py
+
+[ ] Instance type: Nano
+
+[ ] Region: Choose closest to you
+
+[ ] ⚠️ CRITICAL: Service Type = WORKER (NOT Web!)
+    → Click "Advanced" or "Service Type"
+    → Select "Worker"
+    → Remove any port settings
+
+[ ] Add Environment Variable #1:
+    Name: BOT_TOKEN
+    Value: [Paste your bot token]
+
+[ ] Add Environment Variable #2:
+    Name: ADMIN_IDS
+    Value: [Paste your user ID]
+
+[ ] Click "Deploy"
+
+[ ] Wait 3-5 minutes for deployment
+
+
+✅ VERIFY DEPLOYMENT
+─────────────────────────────────────────────────────────────────
+[ ] Check Koyeb dashboard shows "Healthy" (green)
+
+[ ] Click "Logs" tab
+
+[ ] Verify logs show: "✅ Ready to serve!"
+
+[ ] No error messages in logs
+
+
+🧪 FIRST TEST
+─────────────────────────────────────────────────────────────────
+[ ] Open Telegram
+
+[ ] Search for your bot name
+
+[ ] Send: /start
+
+[ ] Bot responds with welcome message and buttons
+
+
+👨‍⚕️ COUNSELOR SETUP
+─────────────────────────────────────────────────────────────────
+[ ] Click "Become a Counselor"
+
+[ ] Select at least 2 specializations
+
+[ ] Write bio (minimum 50 characters)
+
+[ ] Submit application
+
+
+🛡️ ADMIN APPROVAL
+─────────────────────────────────────────────────────────────────
+[ ] Click "Admin Panel" (should appear for you)
+
+[ ] Click "Pending Applications"
+
+[ ] Review your application
+
+[ ] Click "✅ Approve"
+
+[ ] Confirm approval notification
+
+
+🟢 GO ONLINE
+─────────────────────────────────────────────────────────────────
+[ ] Click "Counselor Dashboard"
+
+[ ] Click "🟢 Go Online"
+
+[ ] Status should show green
+
+
+💬 SESSION TEST
+─────────────────────────────────────────────────────────────────
+[ ] Use another Telegram account (friend or test account)
+
+[ ] Send /start to bot
+
+[ ] Click "Request Counseling"
+
+[ ] Select any topic
+
+[ ] Describe situation (or skip)
+
+[ ] Switch back to your main account
+
+[ ] You should receive session request
+
+[ ] Click "✅ Accept Session"
+
+[ ] Send a test message from user account
+
+[ ] Verify counselor receives: "Anonymous User #1234: [message]"
+
+[ ] Send reply from counselor account
+
+[ ] Verify user receives: "Anonymous Counselor #5: [message]"
+
+[ ] Click "End Session" from either side
+
+[ ] Rate the session
+
+[ ] Verify rating saved
+
+
+📊 ADMIN FEATURES TEST
+─────────────────────────────────────────────────────────────────
+[ ] Click "Admin Panel"
+
+[ ] Click "Detailed Statistics" → Verify data shows
+
+[ ] Click "Manage Counselors" → See your counselor profile
+
+[ ] Click "Pending Sessions" → Should show "No pending"
+
+[ ] All features working without errors
+
+
+🎉 PRODUCTION READY
+─────────────────────────────────────────────────────────────────
+[ ] All tests passed
+
+[ ] No errors in logs
+
+[ ] Bot responds quickly
+
+[ ] Anonymity verified (display names masked)
+
+[ ] Sessions work end-to-end
+
+[ ] Admin panel functional
+
+
+📢 GO LIVE
+─────────────────────────────────────────────────────────────────
+[ ] Invite 3-5 peer counselors
+
+[ ] Have them register and get approved
+
+[ ] Ensure they go online
+
+[ ] Share bot link with fellowship
+
+[ ] Monitor for first few sessions
+
+[ ] Gather feedback
+
+
+🔄 ONGOING MAINTENANCE
+─────────────────────────────────────────────────────────────────
+[ ] Check Koyeb dashboard daily (first week)
+
+[ ] Monitor logs for errors
+
+[ ] Approve new counselor applications promptly
+
+[ ] Ensure counselor coverage during peak hours
+
+[ ] Review statistics weekly
+
+[ ] Backup database monthly (via admin exports)
+
+
+═══════════════════════════════════════════════════════════════════
+
+✅ DEPLOYMENT COMPLETE!
+
+Your bot is now running 24/7 on Koyeb's free tier.
+
+Bot Link: https://t.me/YOUR_BOT_USERNAME
+
+Dashboard: https://app.koyeb.com
+
+═══════════════════════════════════════════════════════════════════
+
+Need help? Check these files:
+• KOYEB_DEPLOYMENT.md (detailed guide)
+• KOYEB_QUICK_START.md (quick reference)
+• DEPLOYMENT_READY.md (general deployment info)
+
+═══════════════════════════════════════════════════════════════════
