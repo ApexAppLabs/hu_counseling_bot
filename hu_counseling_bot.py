@@ -96,7 +96,7 @@ def create_counselor_specialization_keyboard(selected: list = None):
             name = topic_data['name'].split('&')[0].strip()  # Shorten name
             
             # Add checkmark if selected
-            display = f"✅ {icon}" if topic_key in selected else icon
+            display = f"✅ {icon} {name}" if topic_key in selected else f"{icon} {name}"
             row.append(InlineKeyboardButton(display, callback_data=f'spec_{topic_key}'))
         keyboard.append(row)
     
