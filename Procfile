@@ -1,1 +1,1 @@
-worker: python main_counseling_bot.py
+web: gunicorn render_web_service:app
