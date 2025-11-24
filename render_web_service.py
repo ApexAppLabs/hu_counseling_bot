@@ -57,7 +57,16 @@ def run_bot():
         logger.info("Importing bot modules...")
         from main_counseling_bot import main as bot_main
         logger.info("Bot modules imported successfully. Starting bot...")
-        bot_main()
+        
+        # Create and run event loop in this thread
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Run the bot in the event loop
+        loop.run_until_complete(asyncio.gather(
+            asyncio.to_thread(bot_main)
+        ))
         
     except Exception as e:
         logger.error(f"Bot crashed: {e}")
