@@ -239,8 +239,13 @@ def main():
     logger.info(f"📊 Database: {db.db_path}")
     logger.info("✅ Ready to serve!")
     
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    
     # Run the bot
-    app.run_polling()
+    app.run_polling(stop_signals=None)
 
 if __name__ == '__main__':
     main()
