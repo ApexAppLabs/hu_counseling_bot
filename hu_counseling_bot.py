@@ -346,8 +346,11 @@ async def user_gender_selected(update: Update, context: ContextTypes.DEFAULT_TYP
         USER_STATE[user_id] = {}
     USER_STATE[user_id]['gender'] = gender
     
-    # Get topic from state
-    topic = USER_STATE[user_id].get('topic', 'general')
+    # Get topic from state - it should have been set in topic_selected
+    topic = USER_STATE[user_id].get('topic')
+    if not topic:
+        await query.edit_message_text("⚠️ Session error: Topic not found. Please start over with /start")
+        return
     topic_data = COUNSELING_TOPICS.get(topic, {})
     topic_name = topic_data.get('name', topic)
     topic_icon = topic_data.get('icon', '💬')
