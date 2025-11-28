@@ -5,6 +5,7 @@ Combines all modules and starts the bot
 
 import logging
 import asyncio
+import os
 from telegram import BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 
@@ -238,14 +239,43 @@ def main():
     # Start bot
     logger.info("🚀 HU Counseling Service Bot is starting...")
     logger.info(f"📊 Database: {db.db_path}")
+
+    use_webhook = os.getenv("USE_WEBHOOK", "false").lower() == "true"
+
+    if use_webhook:
+        # Webhook configuration for public deployment (e.g., Render)
+        base_url = os.getenv("WEBHOOK_BASE_URL")
+        port = int(os.getenv("PORT", "5000"))
+        url_path = os.getenv("WEBHOOK_PATH", BOT_TOKEN)
+
+        if not base_url:
+            logger.error("❌ WEBHOOK_BASE_URL not set but USE_WEBHOOK=true. Falling back to polling.")
+            use_webhook = False
+        else:
+            base_url = base_url.rstrip("/")
+            webhook_url = f"{base_url}/{url_path}"
+
+            logger.info("🌐 Starting in WEBHOOK mode")
+            logger.info(f"🔗 Webhook URL: {webhook_url}")
+            logger.info(f"🔌 Listening on 0.0.0.0:{port}, url_path='{url_path}'")
+
+            app.run_webhook(
+                listen="0.0.0.0",
+                port=port,
+                url_path=url_path,
+                webhook_url=webhook_url,
+            )
+            return
+
+    # Default: polling mode (for local development or when webhook not configured)
+    logger.info("📡 Starting in POLLING mode")
     logger.info("✅ Ready to serve!")
-    
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         asyncio.set_event_loop(asyncio.new_event_loop())
-    
-    # Run the bot
+
     app.run_polling(stop_signals=None)
 
 if __name__ == '__main__':
