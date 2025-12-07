@@ -720,88 +720,75 @@ class CounselingDatabase:
         """Match a session with a counselor"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
         ph = self.param_placeholder
+        
         cursor.execute(f'''
             UPDATE counseling_sessions 
-            SET counselor_id = {ph}, status = 'matched', matched_at = CURRENT_TIMESTAMP
+            SET counselor_id = {ph}, status = 'matched'
             WHERE session_id = {ph}
         ''', (counselor_id, session_id))
         
         conn.commit()
         conn.close()
-        
-        logger.info(f"Session {session_id} matched with counselor {counselor_id}")
-    
+
     @retry_on_locked(max_retries=3, delay=0.5)
     def start_session(self, session_id: int):
-        """Start an active counseling session"""
+        """Mark session as active"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
         ph = self.param_placeholder
+        
         cursor.execute(f'''
             UPDATE counseling_sessions 
             SET status = 'active', started_at = CURRENT_TIMESTAMP
             WHERE session_id = {ph}
         ''', (session_id,))
         
-        cursor.execute('''
-            UPDATE bot_stats 
-            SET stat_value = stat_value + 1, updated_at = CURRENT_TIMESTAMP
-            WHERE stat_name = 'active_sessions'
-        ''')
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"Session {session_id} started successfully")
-    
-    def end_session(self, session_id: int, end_reason: str = 'completed'):
-        """End a counseling session"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE counseling_sessions 
-            SET status = 'ended', ended_at = CURRENT_TIMESTAMP, end_reason = ?
-            WHERE session_id = ?
-        ''', (end_reason, session_id))
-        
-        # Get session data to update stats
-        cursor.execute('''
-            SELECT user_id, counselor_id FROM counseling_sessions WHERE session_id = ?
+        # Update counselor session count
+        cursor.execute(f'''
+            SELECT counselor_id FROM counseling_sessions WHERE session_id = {ph}
         ''', (session_id,))
         row = cursor.fetchone()
         
-        if row:
-            cursor.execute('''
-                UPDATE users SET total_sessions = total_sessions + 1 
-                WHERE user_id = ?
+        if row and row['counselor_id']:
+            cursor.execute(f'''
+                UPDATE counselors 
+                SET total_sessions = total_sessions + 1
+                WHERE counselor_id = {ph}
+            ''', (row['counselor_id'],))
+        
+        # Update user session count
+        cursor.execute(f'''
+            SELECT user_id FROM counseling_sessions WHERE session_id = {ph}
+        ''', (session_id,))
+        row = cursor.fetchone()
+        
+        if row and row['user_id']:
+            cursor.execute(f'''
+                UPDATE users 
+                SET total_sessions = total_sessions + 1, last_active = CURRENT_TIMESTAMP
+                WHERE user_id = {ph}
             ''', (row['user_id'],))
-            
-            if row['counselor_id']:
-                cursor.execute('''
-                    UPDATE counselors 
-                    SET total_sessions = total_sessions + 1 
-                    WHERE counselor_id = ?
-                ''', (row['counselor_id'],))
-        
-        cursor.execute('''
-            UPDATE bot_stats 
-            SET stat_value = stat_value - 1, updated_at = CURRENT_TIMESTAMP
-            WHERE stat_name = 'active_sessions'
-        ''')
-        
-        cursor.execute('''
-            UPDATE bot_stats 
-            SET stat_value = stat_value + 1, updated_at = CURRENT_TIMESTAMP
-            WHERE stat_name = 'completed_sessions'
-        ''')
         
         conn.commit()
         conn.close()
-    
+
+    @retry_on_locked(max_retries=3, delay=0.5)
+    def end_session(self, session_id: int, reason: str = 'completed'):
+        """End a session"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        ph = self.param_placeholder
+        
+        cursor.execute(f'''
+            UPDATE counseling_sessions 
+            SET status = 'ended', ended_at = CURRENT_TIMESTAMP, end_reason = {ph}
+            WHERE session_id = {ph}
+        ''', (reason, session_id))
+        
+        conn.commit()
+        conn.close()
+
     def get_session(self, session_id: int) -> Optional[Dict]:
         """Get session by ID"""
         conn = self.get_connection()
@@ -813,15 +800,16 @@ class CounselingDatabase:
         conn.close()
         
         return dict(row) if row else None
-    
+
     def get_active_session_by_user(self, user_id: int) -> Optional[Dict]:
         """Get user's active session"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             SELECT * FROM counseling_sessions 
-            WHERE user_id = ? AND status IN ('matched', 'active')
+            WHERE user_id = {ph} AND status IN ('matched', 'active')
             ORDER BY created_at DESC LIMIT 1
         ''', (user_id,))
         
@@ -829,15 +817,16 @@ class CounselingDatabase:
         conn.close()
         
         return dict(row) if row else None
-    
+
     def get_active_session_by_counselor(self, counselor_id: int) -> Optional[Dict]:
         """Get counselor's active session"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             SELECT * FROM counseling_sessions 
-            WHERE counselor_id = ? AND status IN ('matched', 'active')
+            WHERE counselor_id = {ph} AND status IN ('matched', 'active')
             ORDER BY created_at DESC LIMIT 1
         ''', (counselor_id,))
         
@@ -845,62 +834,63 @@ class CounselingDatabase:
         conn.close()
         
         return dict(row) if row else None
-    
+
     def get_pending_sessions(self, limit: int = 10) -> List[Dict]:
         """Get pending session requests ordered by priority"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             SELECT * FROM counseling_sessions 
             WHERE status = 'requested'
             ORDER BY priority DESC, created_at ASC
-            LIMIT ?
+            LIMIT {ph}
         ''', (limit,))
         
         rows = cursor.fetchall()
         conn.close()
         
         return [dict(row) for row in rows]
-    
+
     def add_session_rating(self, session_id: int, rating: int, feedback: str = None):
         """Add user rating for a session"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             UPDATE counseling_sessions 
-            SET user_rating = ?, user_feedback = ?
-            WHERE session_id = ?
+            SET user_rating = {ph}, user_feedback = {ph}
+            WHERE session_id = {ph}
         ''', (rating, feedback, session_id))
         
         # Update counselor rating
-        cursor.execute('''
-            SELECT counselor_id FROM counseling_sessions WHERE session_id = ?
+        cursor.execute(f'''
+            SELECT counselor_id FROM counseling_sessions WHERE session_id = {ph}
         ''', (session_id,))
         row = cursor.fetchone()
         
         if row and row['counselor_id']:
-            cursor.execute('''
+            cursor.execute(f'''
                 UPDATE counselors 
-                SET rating_sum = rating_sum + ?, rating_count = rating_count + 1
-                WHERE counselor_id = ?
+                SET rating_sum = rating_sum + {ph}, rating_count = rating_count + 1
+                WHERE counselor_id = {ph}
             ''', (rating, row['counselor_id']))
         
         conn.commit()
         conn.close()
-    
-    # ==================== MESSAGE MANAGEMENT ====================
-    
+
     @retry_on_locked(max_retries=3, delay=0.5)
     def add_message(self, session_id: int, sender_role: str, sender_id: int, message_text: str) -> int:
         """Add a message to a session"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             INSERT INTO session_messages (session_id, sender_role, sender_id, message_text)
-            VALUES (?, ?, ?, ?)
+            VALUES ({ph}, {ph}, {ph}, {ph})
         ''', (session_id, sender_role, sender_id, message_text))
         
         message_id = cursor.lastrowid
@@ -908,24 +898,25 @@ class CounselingDatabase:
         conn.close()
         
         return message_id
-    
+
     def get_session_messages(self, session_id: int, limit: int = 100) -> List[Dict]:
         """Get messages for a session"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             SELECT * FROM session_messages 
-            WHERE session_id = ?
+            WHERE session_id = {ph}
             ORDER BY created_at ASC
-            LIMIT ?
+            LIMIT {ph}
         ''', (session_id, limit))
         
         rows = cursor.fetchall()
         conn.close()
         
         return [dict(row) for row in rows]
-    
+
     # ==================== ADMIN MANAGEMENT ====================
     
     def add_admin(self, user_id: int, added_by: int, role: str = 'admin'):

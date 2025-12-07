@@ -1,64 +1,67 @@
+#!/usr/bin/env python3
 """
-Fix the bad session where counselor is chatting with themselves
-This happens when a counselor also requests counseling
+Fix Bad Sessions Tool
+Resolves invalid sessions where user and counselor are the same person
 """
+
+import sys
+import os
+
+# Add parent directory to path so we can import our modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from counseling_database import CounselingDatabase
 
-db = CounselingDatabase()
-
 print("=" * 60)
-print("FIXING BAD SESSIONS")
+print("HU Counseling Bot - Fix Bad Sessions Tool")
 print("=" * 60)
+print()
 
-# Find sessions where user_id matches counselor's user_id
+# Initialize database
+try:
+    db = CounselingDatabase()
+    print("✅ Database connected successfully")
+except Exception as e:
+    print(f"❌ Database connection failed: {e}")
+    sys.exit(1)
+
+# Find bad sessions where user_id equals counselor's user_id
+print("\n🔍 Finding bad sessions...")
 conn = db.get_connection()
 cursor = conn.cursor()
 
-cursor.execute("""
-    SELECT s.session_id, s.user_id, s.counselor_id, s.status,
-           c.user_id as counselor_user_id, c.display_name
+# Import the param_placeholder
+ph = db.param_placeholder
+
+cursor.execute(f"""
+    SELECT s.session_id, s.user_id, c.user_id as counselor_user_id
     FROM counseling_sessions s
     JOIN counselors c ON s.counselor_id = c.counselor_id
     WHERE s.user_id = c.user_id
-    AND s.status IN ('matched', 'active')
 """)
 
 bad_sessions = cursor.fetchall()
+print(f"Found {len(bad_sessions)} bad session(s)")
 
-if not bad_sessions:
-    print("\n✅ No bad sessions found! All sessions are valid.")
-else:
-    print(f"\n❌ Found {len(bad_sessions)} bad session(s):\n")
-    
-    for session in bad_sessions:
-        print(f"Session ID: {session['session_id']}")
-        print(f"  User ID: {session['user_id']}")
-        print(f"  Counselor User ID: {session['counselor_user_id']}")
-        print(f"  Status: {session['status']}")
-        print(f"  Problem: Counselor is talking to themselves!")
-        print()
-    
-    print("=" * 60)
-    print("FIXING...")
-    print("=" * 60)
-    
+# Fix bad sessions
+if bad_sessions:
+    print("\n🔧 Fixing bad sessions...")
     for session in bad_sessions:
         session_id = session['session_id']
+        print(f"  Fixing session {session_id}...")
         
-        # End this bad session
-        cursor.execute("""
+        cursor.execute(f"""
             UPDATE counseling_sessions 
             SET status = 'completed', 
                 end_reason = 'Invalid session - counselor was also user',
                 ended_at = CURRENT_TIMESTAMP
-            WHERE session_id = ?
+            WHERE session_id = {ph}
         """, (session_id,))
         
         print(f"✅ Ended session {session_id}")
-    
-    conn.commit()
-    print(f"\n✅ Fixed {len(bad_sessions)} bad session(s)")
+
+conn.commit()
+print(f"\n✅ Fixed {len(bad_sessions)} bad session(s)")
 
 conn.close()
 

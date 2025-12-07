@@ -849,20 +849,21 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
     return
 
 async def end_session_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle end session request - works for requested, matched, or active sessions"""
+    """Prompt to end session - works for users and counselors"""
     query = update.callback_query
     await query.answer()
     
     user_id = query.from_user.id
     
-    # Find ANY session (requested, matched, or active)
+    # Check if user has an active session
     conn = db.get_connection()
     cursor = conn.cursor()
+    ph = db.param_placeholder
     
     # Check as user
-    cursor.execute('''
+    cursor.execute(f'''
         SELECT * FROM counseling_sessions 
-        WHERE user_id = ? AND status IN ('requested', 'matched', 'active')
+        WHERE user_id = {ph} AND status IN ('requested', 'matched', 'active')
         ORDER BY created_at DESC LIMIT 1
     ''', (user_id,))
     session = cursor.fetchone()
@@ -872,9 +873,9 @@ async def end_session_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Check if counselor
         counselor = db.get_counselor_by_user_id(user_id)
         if counselor:
-            cursor.execute('''
+            cursor.execute(f'''
                 SELECT * FROM counseling_sessions 
-                WHERE counselor_id = ? AND status IN ('matched', 'active')
+                WHERE counselor_id = {ph} AND status IN ('matched', 'active')
                 ORDER BY created_at DESC LIMIT 1
             ''', (counselor['counselor_id'],))
             session = cursor.fetchone()
@@ -1030,7 +1031,8 @@ async def session_info_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # Get message count
     conn = db.get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) as count FROM session_messages WHERE session_id = ?', (session['session_id'],))
+    ph = db.param_placeholder
+    cursor.execute(f'SELECT COUNT(*) as count FROM session_messages WHERE session_id = {ph}', (session['session_id'],))
     message_count = cursor.fetchone()['count']
     conn.close()
     

@@ -38,7 +38,7 @@ class SessionTimeoutManager:
         
         while self.is_running:
             try:
-                await self.check_and_timeout_sessions()
+                await self.check_timeouts()
                 await asyncio.sleep(self.check_interval)
             except Exception as e:
                 logger.error(f"Error in timeout manager: {e}")
@@ -49,33 +49,36 @@ class SessionTimeoutManager:
         self.is_running = False
         logger.info("Session timeout manager stopped")
     
-    async def check_and_timeout_sessions(self):
-        """
-        Check for inactive sessions and auto-end them
-        """
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-        
+    async def check_timeouts(self):
+        """Check for and end timed-out sessions"""
         try:
-            # Get all active and matched sessions
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            ph = self.db.param_placeholder
+            
+            # Calculate timeout threshold
+            timeout_threshold = datetime.now() - timedelta(hours=self.timeout_hours)
+            
+            # Get all active sessions
             cursor.execute('''
-                SELECT session_id, user_id, counselor_id, topic, started_at, matched_at
-                FROM counseling_sessions
-                WHERE status IN ('active', 'matched')
+                SELECT session_id, user_id, counselor_id, created_at, matched_at, started_at
+                FROM counseling_sessions 
+                WHERE status = 'active'
             ''')
             
-            sessions = cursor.fetchall()
-            timeout_threshold = datetime.now() - timedelta(hours=self.timeout_hours)
+            active_sessions = cursor.fetchall()
+            
             timed_out_count = 0
             
-            for session in sessions:
+            for session_row in active_sessions:
+                session = dict(session_row)
                 session_id = session['session_id']
                 
                 # Get last message time
-                cursor.execute('''
+                cursor.execute(f'''
                     SELECT MAX(created_at) as last_message
                     FROM session_messages
-                    WHERE session_id = ?
+                    WHERE session_id = {ph}
                 ''', (session_id,))
                 
                 result = cursor.fetchone()

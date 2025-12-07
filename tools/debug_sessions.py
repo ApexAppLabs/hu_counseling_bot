@@ -1,32 +1,50 @@
+#!/usr/bin/env python3
 """
-Debug script to check active sessions and message routing
-Run this while bot is running to see what's happening
+Debug Sessions Tool
+Shows current sessions, counselors, and recent messages for troubleshooting
 """
+
+import sys
+import os
+
+# Add parent directory to path so we can import our modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from counseling_database import CounselingDatabase
 
-db = CounselingDatabase()
-
 print("=" * 60)
-print("SESSION DEBUGGING TOOL")
+print("HU Counseling Bot - Debug Sessions Tool")
 print("=" * 60)
+print()
 
-# Get all active sessions
-conn = db.get_connection()
-cursor = conn.cursor()
+# Initialize database
+try:
+    db = CounselingDatabase()
+    print("✅ Database connected successfully")
+except Exception as e:
+    print(f"❌ Database connection failed: {e}")
+    sys.exit(1)
 
 print("\n1. ACTIVE SESSIONS:")
 print("-" * 60)
+
+conn = db.get_connection()
+cursor = conn.cursor()
+
+# Import the param_placeholder
+ph = db.param_placeholder
+
 cursor.execute("""
-    SELECT session_id, user_id, counselor_id, topic, status, started_at
-    FROM counseling_sessions 
+    SELECT session_id, user_id, counselor_id, topic, status, created_at, started_at
+    FROM counseling_sessions
     WHERE status IN ('matched', 'active')
-    ORDER BY session_id DESC
+    ORDER BY created_at DESC
 """)
+
 sessions = cursor.fetchall()
 
 if not sessions:
-    print("   No active sessions found")
+    print("   No active sessions")
 else:
     for s in sessions:
         print(f"\n   Session ID: {s['session_id']}")
@@ -34,19 +52,14 @@ else:
         print(f"   Counselor ID: {s['counselor_id']}")
         print(f"   Topic: {s['topic']}")
         print(f"   Status: {s['status']}")
-        print(f"   Started: {s['started_at']}")
-        
-        # Get counselor details
-        counselor = db.get_counselor(s['counselor_id'])
-        if counselor:
-            print(f"   Counselor User ID: {counselor['user_id']}")
-            print(f"   Counselor Status: {counselor.get('status', 'unknown')}")
+        print(f"   Created: {s['created_at']}")
+        print(f"   Started: {s['started_at'] or 'Not started'}")
         
         # Get message count
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT COUNT(*) as count, sender_role
             FROM session_messages 
-            WHERE session_id = ?
+            WHERE session_id = {ph}
             GROUP BY sender_role
         """, (s['session_id'],))
         messages = cursor.fetchall()

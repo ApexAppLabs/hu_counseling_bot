@@ -936,26 +936,30 @@ async def admin_pending_sessions(update: Update, context: ContextTypes.DEFAULT_T
 # ==================== NEW ADMIN MANAGEMENT HANDLERS ====================
 
 async def admin_view_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """View detailed counselor information with management options"""
+    """View detailed counselor information"""
     query = update.callback_query
     await query.answer()
     
     counselor_id = int(query.data.replace('admin_view_counselor_', ''))
-    user_id = query.from_user.id
     
-    from hu_counseling_bot import db, ADMIN_IDS
-    if not db.is_admin(user_id) and user_id not in ADMIN_IDS:
-        await query.answer("⚠️ You don't have admin access.", show_alert=True)
-        return
-    
+    from hu_counseling_bot import db
     counselor = db.get_counselor(counselor_id)
+    
     if not counselor:
         await query.edit_message_text("⚠️ Counselor not found.")
         return
     
-    # Get counselor stats
+    # Parse specializations
+    import json
+    try:
+        counselor['specializations'] = json.loads(counselor['specializations'])
+    except:
+        counselor['specializations'] = []
+    
+    # Get additional info
     conn = db.get_connection()
     cursor = conn.cursor()
+    ph = db.param_placeholder
     
     # Get rating info
     rating_avg = 0
@@ -963,9 +967,9 @@ async def admin_view_counselor(update: Update, context: ContextTypes.DEFAULT_TYP
         rating_avg = counselor['rating_sum'] / counselor['rating_count']
     
     # Get active session count
-    cursor.execute('''
+    cursor.execute(f'''
         SELECT COUNT(*) as count FROM counseling_sessions 
-        WHERE counselor_id = ? AND status = 'active'
+        WHERE counselor_id = {ph} AND status = 'active'
     ''', (counselor_id,))
     active_sessions = cursor.fetchone()['count']
     
