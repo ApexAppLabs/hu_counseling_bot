@@ -6,6 +6,7 @@ Supports anonymous counseling sessions between users and counselors
 import sqlite3
 import json
 import time
+import os
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Tuple
 import logging
@@ -88,8 +89,10 @@ COUNSELING_TOPICS = {
     }
 }
 
+DB_PATH = os.getenv("DB_PATH", "hu_counseling.db")
+
 class CounselingDatabase:
-    def __init__(self, db_path='hu_counseling.db'):
+    def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
         self.init_database()
         self.migrate_add_gender_column()

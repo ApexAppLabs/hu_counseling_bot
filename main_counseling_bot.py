@@ -118,7 +118,7 @@ async def post_init(application):
     
     # Create initial database backup
     try:
-        backup_database()
+        backup_database(db.db_path)
         logger.info("✅ Initial database backup created")
     except Exception as e:
         logger.warning(f"Initial backup failed: {e}")
