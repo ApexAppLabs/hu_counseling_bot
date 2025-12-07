@@ -14,6 +14,15 @@ from functools import wraps
 
 logger = logging.getLogger(__name__)
 
+# Database backend detection
+USE_POSTGRES = bool(os.getenv("DATABASE_URL"))
+if USE_POSTGRES:
+    import psycopg2
+    import psycopg2.extras
+    logger.info("Using PostgreSQL backend")
+else:
+    logger.info("Using SQLite backend")
+
 def retry_on_locked(max_retries=3, delay=0.5):
     """Decorator to retry database operations if locked"""
     def decorator(func):
@@ -99,20 +108,31 @@ class CounselingDatabase:
     
     def get_connection(self):
         """Get database connection with proper timeout and WAL mode"""
-        conn = sqlite3.connect(
-            self.db_path, 
-            timeout=30.0,  # Wait up to 30 seconds if database is locked
-            check_same_thread=False  # Allow connection across threads
-        )
-        conn.row_factory = sqlite3.Row
-        
-        # Enable WAL mode for better concurrency
-        conn.execute('PRAGMA journal_mode=WAL')
-        
-        # Set busy timeout
-        conn.execute('PRAGMA busy_timeout=30000')  # 30 seconds in milliseconds
-        
-        return conn
+        if USE_POSTGRES:
+            conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+            # DictCursor so rows behave like dicts (similar to sqlite3.Row)
+            conn.cursor_factory = psycopg2.extras.DictCursor
+            return conn
+        else:
+            conn = sqlite3.connect(
+                self.db_path,
+                timeout=30.0,  # Wait up to 30 seconds if database is locked
+                check_same_thread=False  # Allow connection across threads
+            )
+            conn.row_factory = sqlite3.Row
+            
+            # Enable WAL mode for better concurrency
+            conn.execute('PRAGMA journal_mode=WAL')
+            
+            # Set busy timeout
+            conn.execute('PRAGMA busy_timeout=30000')  # 30 seconds in milliseconds
+            
+            return conn
+    
+    @property
+    def param_placeholder(self):
+        """Return the correct placeholder for the current DB backend"""
+        return "%s" if USE_POSTGRES else "?"
     
     def init_database(self):
         """Initialize all database tables"""
@@ -120,9 +140,9 @@ class CounselingDatabase:
         cursor = conn.cursor()
         
         # Users table (seekers of counseling)
-        cursor.execute('''
+        cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY,
+                user_id BIGINT PRIMARY KEY,
                 username TEXT,
                 first_name TEXT,
                 last_name TEXT,
@@ -136,10 +156,10 @@ class CounselingDatabase:
         ''')
         
         # Counselors table
-        cursor.execute('''
+        cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS counselors (
-                counselor_id INTEGER PRIMARY KEY,
-                user_id INTEGER UNIQUE NOT NULL,
+                counselor_id SERIAL PRIMARY KEY,
+                user_id BIGINT UNIQUE NOT NULL,
                 display_name TEXT,
                 bio TEXT,
                 gender TEXT DEFAULT 'anonymous',
@@ -149,7 +169,7 @@ class CounselingDatabase:
                 total_sessions INTEGER DEFAULT 0,
                 rating_sum INTEGER DEFAULT 0,
                 rating_count INTEGER DEFAULT 0,
-                approved_by INTEGER,
+                approved_by BIGINT,
                 approved_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -157,10 +177,10 @@ class CounselingDatabase:
         ''')
         
         # Counseling sessions table
-        cursor.execute('''
+        cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS counseling_sessions (
-                session_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
+                session_id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
                 counselor_id INTEGER,
                 topic TEXT NOT NULL,
                 description TEXT,
@@ -179,12 +199,12 @@ class CounselingDatabase:
         ''')
         
         # Session messages table
-        cursor.execute('''
+        cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS session_messages (
-                message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id SERIAL PRIMARY KEY,
                 session_id INTEGER NOT NULL,
                 sender_role TEXT NOT NULL,
-                sender_id INTEGER NOT NULL,
+                sender_id BIGINT NOT NULL,
                 message_text TEXT NOT NULL,
                 is_read INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -193,9 +213,9 @@ class CounselingDatabase:
         ''')
         
         # Counselor availability table
-        cursor.execute('''
+        cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS counselor_availability (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 counselor_id INTEGER NOT NULL,
                 day_of_week INTEGER NOT NULL,
                 start_time TEXT NOT NULL,
@@ -215,23 +235,36 @@ class CounselingDatabase:
         ''')
         
         # Initialize bot stats
-        cursor.execute('''
-            INSERT OR IGNORE INTO bot_stats (stat_name, stat_value) 
-            VALUES 
-                ('total_users', 0),
-                ('total_counselors', 0),
-                ('active_counselors', 0),
-                ('total_sessions', 0),
-                ('active_sessions', 0),
-                ('completed_sessions', 0)
-        ''')
+        if USE_POSTGRES:
+            cursor.execute('''
+                INSERT INTO bot_stats (stat_name, stat_value) 
+                VALUES 
+                    ('total_users', 0),
+                    ('total_counselors', 0),
+                    ('active_counselors', 0),
+                    ('total_sessions', 0),
+                    ('active_sessions', 0),
+                    ('completed_sessions', 0)
+                ON CONFLICT (stat_name) DO NOTHING
+            ''')
+        else:
+            cursor.execute('''
+                INSERT OR IGNORE INTO bot_stats (stat_name, stat_value) 
+                VALUES 
+                    ('total_users', 0),
+                    ('total_counselors', 0),
+                    ('active_counselors', 0),
+                    ('total_sessions', 0),
+                    ('active_sessions', 0),
+                    ('completed_sessions', 0)
+            ''')
         
         # Admin/moderator table
-        cursor.execute('''
+        cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS admins (
-                user_id INTEGER PRIMARY KEY,
+                user_id BIGINT PRIMARY KEY,
                 role TEXT DEFAULT 'admin',
-                added_by INTEGER,
+                added_by BIGINT,
                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -304,21 +337,22 @@ class CounselingDatabase:
         """Add or update user"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute(f'SELECT user_id FROM users WHERE user_id = {ph}', (user_id,))
         existing = cursor.fetchone()
         
         if existing:
-            cursor.execute('''
+            cursor.execute(f'''
                 UPDATE users 
-                SET username = ?, first_name = ?, last_name = ?, 
-                    language_code = ?, last_active = CURRENT_TIMESTAMP
-                WHERE user_id = ?
+                SET username = {ph}, first_name = {ph}, last_name = {ph}, 
+                    language_code = {ph}, last_active = CURRENT_TIMESTAMP
+                WHERE user_id = {ph}
             ''', (username, first_name, last_name, language_code, user_id))
         else:
-            cursor.execute('''
+            cursor.execute(f'''
                 INSERT INTO users (user_id, username, first_name, last_name, language_code)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph})
             ''', (user_id, username, first_name, last_name, language_code))
         
         conn.commit()
@@ -328,8 +362,9 @@ class CounselingDatabase:
         """Get user data"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute(f'SELECT * FROM users WHERE user_id = {ph}', (user_id,))
         row = cursor.fetchone()
         conn.close()
         
@@ -339,11 +374,12 @@ class CounselingDatabase:
         """Update user's gender"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             UPDATE users 
-            SET gender = ?
-            WHERE user_id = ?
+            SET gender = {ph}
+            WHERE user_id = {ph}
         ''', (gender, user_id))
         
         conn.commit()
@@ -355,8 +391,9 @@ class CounselingDatabase:
         """Check if user is banned"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('SELECT is_banned FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute(f'SELECT is_banned FROM users WHERE user_id = {ph}', (user_id,))
         row = cursor.fetchone()
         conn.close()
         
@@ -369,12 +406,13 @@ class CounselingDatabase:
         """Register a new counselor (pending approval)"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
         spec_json = json.dumps(specializations)
         
-        cursor.execute('''
+        cursor.execute(f'''
             INSERT INTO counselors (user_id, display_name, bio, gender, specializations, status)
-            VALUES (?, ?, ?, ?, ?, 'pending')
+            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, 'pending')
         ''', (user_id, display_name, bio, gender, spec_json))
         
         counselor_id = cursor.lastrowid
@@ -388,12 +426,13 @@ class CounselingDatabase:
         """Approve a counselor application"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             UPDATE counselors 
             SET status = 'approved', is_available = 1, 
-                approved_by = ?, approved_at = CURRENT_TIMESTAMP
-            WHERE counselor_id = ?
+                approved_by = {ph}, approved_at = CURRENT_TIMESTAMP
+            WHERE counselor_id = {ph}
         ''', (admin_id, counselor_id))
         
         cursor.execute('''
@@ -409,9 +448,10 @@ class CounselingDatabase:
         """Reject a counselor application"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
-            UPDATE counselors SET status = 'rejected' WHERE counselor_id = ?
+        cursor.execute(f'''
+            UPDATE counselors SET status = 'rejected' WHERE counselor_id = {ph}
         ''', (counselor_id,))
         
         conn.commit()
@@ -421,11 +461,12 @@ class CounselingDatabase:
         """Temporarily deactivate a counselor (can be reactivated)"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             UPDATE counselors 
             SET status = 'deactivated', is_available = 0
-            WHERE counselor_id = ?
+            WHERE counselor_id = {ph}
         ''', (counselor_id,))
         
         conn.commit()
@@ -437,11 +478,12 @@ class CounselingDatabase:
         """Reactivate a deactivated counselor"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             UPDATE counselors 
             SET status = 'approved', is_available = 0
-            WHERE counselor_id = ?
+            WHERE counselor_id = {ph}
         ''', (counselor_id,))
         
         conn.commit()
@@ -453,11 +495,12 @@ class CounselingDatabase:
         """Permanently ban a counselor"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
+        cursor.execute(f'''
             UPDATE counselors 
             SET status = 'banned', is_available = 0
-            WHERE counselor_id = ?
+            WHERE counselor_id = {ph}
         ''', (counselor_id,))
         
         # Log the ban
@@ -470,24 +513,25 @@ class CounselingDatabase:
         """Update counselor information"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
         updates = []
         params = []
         
         if display_name:
-            updates.append("display_name = ?")
+            updates.append(f"display_name = {ph}")
             params.append(display_name)
         
         if bio:
-            updates.append("bio = ?")
+            updates.append(f"bio = {ph}")
             params.append(bio)
         
         if specializations:
-            updates.append("specializations = ?")
+            updates.append(f"specializations = {ph}")
             params.append(json.dumps(specializations))
         
         if updates:
-            query = f"UPDATE counselors SET {', '.join(updates)} WHERE counselor_id = ?"
+            query = f"UPDATE counselors SET {', '.join(updates)} WHERE counselor_id = {ph}"
             params.append(counselor_id)
             cursor.execute(query, params)
             conn.commit()
@@ -500,8 +544,9 @@ class CounselingDatabase:
         """Get counselor data by user_id"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('SELECT * FROM counselors WHERE user_id = ?', (user_id,))
+        cursor.execute(f'SELECT * FROM counselors WHERE user_id = {ph}', (user_id,))
         row = cursor.fetchone()
         conn.close()
         
@@ -515,8 +560,9 @@ class CounselingDatabase:
         """Get counselor data by counselor_id"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('SELECT * FROM counselors WHERE counselor_id = ?', (counselor_id,))
+        cursor.execute(f'SELECT * FROM counselors WHERE counselor_id = {ph}', (counselor_id,))
         row = cursor.fetchone()
         conn.close()
         
@@ -530,9 +576,10 @@ class CounselingDatabase:
         """Set counselor's availability status"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
-            UPDATE counselors SET is_available = ? WHERE counselor_id = ?
+        cursor.execute(f'''
+            UPDATE counselors SET is_available = {ph} WHERE counselor_id = {ph}
         ''', (1 if is_available else 0, counselor_id))
         
         conn.commit()
@@ -616,9 +663,10 @@ class CounselingDatabase:
             if any(word in description.lower() for word in crisis_keywords):
                 priority = 10
         
-        cursor.execute('''
+        ph = self.param_placeholder
+        cursor.execute(f'''
             INSERT INTO counseling_sessions (user_id, topic, description, status, priority)
-            VALUES (?, ?, ?, 'requested', ?)
+            VALUES ({ph}, {ph}, {ph}, 'requested', {ph})
         ''', (user_id, topic, description, priority))
         
         session_id = cursor.lastrowid
@@ -640,10 +688,11 @@ class CounselingDatabase:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('''
+        ph = self.param_placeholder
+        cursor.execute(f'''
             UPDATE counseling_sessions 
-            SET counselor_id = ?, status = 'matched', matched_at = CURRENT_TIMESTAMP
-            WHERE session_id = ?
+            SET counselor_id = {ph}, status = 'matched', matched_at = CURRENT_TIMESTAMP
+            WHERE session_id = {ph}
         ''', (counselor_id, session_id))
         
         conn.commit()
@@ -657,10 +706,11 @@ class CounselingDatabase:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('''
+        ph = self.param_placeholder
+        cursor.execute(f'''
             UPDATE counseling_sessions 
             SET status = 'active', started_at = CURRENT_TIMESTAMP
-            WHERE session_id = ?
+            WHERE session_id = {ph}
         ''', (session_id,))
         
         cursor.execute('''
