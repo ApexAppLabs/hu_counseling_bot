@@ -574,15 +574,25 @@ class CounselingDatabase:
         
         if topic:
             cursor.execute('''
-                SELECT * FROM counselors 
-                WHERE status = 'approved' AND is_available = 1
-                ORDER BY total_sessions ASC, rating_sum DESC
+                SELECT c.* FROM counselors c
+                WHERE c.status = 'approved' AND c.is_available = 1
+                AND NOT EXISTS (
+                    SELECT 1 FROM counseling_sessions s 
+                    WHERE s.counselor_id = c.counselor_id 
+                    AND s.status IN ('matched', 'active')
+                )
+                ORDER BY c.total_sessions ASC, c.rating_sum DESC
             ''')
         else:
             cursor.execute('''
-                SELECT * FROM counselors 
-                WHERE status = 'approved' AND is_available = 1
-                ORDER BY total_sessions ASC
+                SELECT c.* FROM counselors c
+                WHERE c.status = 'approved' AND c.is_available = 1
+                AND NOT EXISTS (
+                    SELECT 1 FROM counseling_sessions s 
+                    WHERE s.counselor_id = c.counselor_id 
+                    AND s.status IN ('matched', 'active')
+                )
+                ORDER BY c.total_sessions ASC
             ''')
         
         rows = cursor.fetchall()
