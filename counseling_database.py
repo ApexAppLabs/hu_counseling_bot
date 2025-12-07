@@ -31,92 +31,60 @@ def retry_on_locked(max_retries=3, delay=0.5):
         return wrapper
     return decorator
 
-# Counseling topics for student gospel fellowship
+# Counseling topics for student gospel fellowship (6 high-level categories)
 COUNSELING_TOPICS = {
-    'spiritual': {
-        'name': 'Spiritual Growth & Faith',
-        'icon': '🙏',
-        'description': 'Questions about faith, prayer, Bible study, spiritual struggles',
-        'keywords': ['faith', 'prayer', 'bible', 'god', 'jesus', 'spiritual', 'worship']
-    },
-    'mental_health': {
-        'name': 'Mental Health & Wellness',
-        'icon': '🧠',
-        'description': 'Anxiety, depression, stress, emotional struggles',
-        'keywords': ['anxiety', 'depression', 'stress', 'mental', 'emotional', 'overwhelmed']
-    },
-    'relationships': {
-        'name': 'Relationships & Dating',
-        'icon': '💑',
-        'description': 'Dating, friendships, family issues, relationship advice',
-        'keywords': ['relationship', 'dating', 'marriage', 'boyfriend', 'girlfriend', 'friend']
-    },
-    'academic': {
-        'name': 'Academic Struggles',
+    'academic_career': {
+        'name': 'Academic & Career',
         'icon': '📚',
-        'description': 'Study stress, exam anxiety, time management, academic pressure',
-        'keywords': ['study', 'exam', 'academic', 'school', 'university', 'grades']
+        'description': 'Academic struggles, exams, university life, career choices, work and finances',
+        'keywords': [
+            'study', 'exam', 'academic', 'school', 'university', 'grades',
+            'career', 'job', 'future', 'work', 'profession', 'internship',
+            'money', 'financial', 'budget', 'debt'
+        ]
     },
-    'identity': {
-        'name': 'Identity & Purpose',
-        'icon': '🎯',
-        'description': 'Life purpose, calling, identity questions, self-worth',
-        'keywords': ['purpose', 'calling', 'identity', 'worth', 'meaning', 'direction']
+    'mental_emotional': {
+        'name': 'Mental Health & Emotional',
+        'icon': '🧠',
+        'description': 'Anxiety, depression, stress, grief, trauma, emotional struggles',
+        'keywords': [
+            'anxiety', 'depression', 'stress', 'mental', 'emotional', 'overwhelmed',
+            'grief', 'loss', 'death', 'mourning', 'trauma', 'sad'
+        ]
     },
-    'addiction': {
-        'name': 'Addiction & Habits',
-        'icon': '🚫',
-        'description': 'Struggling with addictions, bad habits, temptations',
-        'keywords': ['addiction', 'habit', 'temptation', 'porn', 'alcohol', 'smoking']
+    'relationships_social': {
+        'name': 'Relationships & Social Life',
+        'icon': '💑',
+        'description': 'Friendships, family, dating, social life and community',
+        'keywords': [
+            'relationship', 'dating', 'marriage', 'boyfriend', 'girlfriend', 'friend',
+            'family', 'parents', 'mother', 'father', 'sibling', 'home'
+        ]
     },
-    'grief': {
-        'name': 'Grief & Loss',
-        'icon': '💔',
-        'description': 'Dealing with loss, grief, mourning, trauma',
-        'keywords': ['grief', 'loss', 'death', 'mourning', 'trauma', 'sad']
+    'life_skills_growth': {
+        'name': 'Life Skills & Personal Growth',
+        'icon': '🌱',
+        'description': 'Identity, purpose, habits, faith walk, life decisions and personal growth',
+        'keywords': [
+            'purpose', 'calling', 'identity', 'worth', 'meaning', 'direction',
+            'habit', 'discipline', 'time management', 'growth', 'improve'
+        ]
     },
-    'financial': {
-        'name': 'Financial Concerns',
-        'icon': '💰',
-        'description': 'Money issues, financial stress, budgeting help',
-        'keywords': ['money', 'financial', 'budget', 'debt', 'job', 'work']
-    },
-    'family': {
-        'name': 'Family Issues',
-        'icon': '👨‍👩‍👧‍👦',
-        'description': 'Family conflicts, parental pressure, sibling issues',
-        'keywords': ['family', 'parents', 'mother', 'father', 'sibling', 'home']
-    },
-    'career': {
-        'name': 'Career & Future',
-        'icon': '💼',
-        'description': 'Career guidance, future planning, job search',
-        'keywords': ['career', 'job', 'future', 'work', 'profession', 'internship']
-    },
-    'ministry': {
-        'name': 'Ministry & Service',
-        'icon': '✝️',
-        'description': 'Serving in ministry, leadership, evangelism questions',
-        'keywords': ['ministry', 'service', 'leadership', 'evangelism', 'mission']
-    },
-    'doubt': {
-        'name': 'Doubt & Questions',
-        'icon': '❓',
-        'description': 'Doubts about faith, theological questions, confusion',
-        'keywords': ['doubt', 'question', 'confusion', 'uncertain', 'why']
-    },
-    'crisis': {
-        'name': 'Crisis & Emergency',
+    'crisis_substance': {
+        'name': 'Crisis & Substance Support',
         'icon': '🆘',
-        'description': 'Immediate help needed, suicidal thoughts, severe crisis',
-        'keywords': ['crisis', 'emergency', 'suicide', 'hurt', 'danger', 'help'],
+        'description': 'Immediate crisis, safety concerns, suicidal thoughts, and substance use struggles',
+        'keywords': [
+            'crisis', 'emergency', 'suicide', 'hurt', 'danger', 'help',
+            'addiction', 'substance', 'alcohol', 'drugs', 'smoking', 'porn'
+        ],
         'priority': True  # High priority matching
     },
-    'general': {
-        'name': 'General Counseling',
+    'other': {
+        'name': 'Other Counseling',
         'icon': '💬',
-        'description': 'General questions, not sure which category fits',
-        'keywords': ['general', 'other', 'advice', 'help', 'talk']
+        'description': "If you're not sure where your situation fits, choose this.",
+        'keywords': ['other', 'general', 'advice', 'help', 'talk']
     }
 }
 
@@ -638,7 +606,7 @@ class CounselingDatabase:
         
         # Check for crisis keywords for priority
         priority = 0
-        if topic == 'crisis':
+        if topic == 'crisis_substance':
             priority = 10
         elif description:
             crisis_keywords = ['suicide', 'kill myself', 'end my life', 'emergency', 'urgent']

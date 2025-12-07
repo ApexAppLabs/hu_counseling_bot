@@ -77,7 +77,7 @@ class CounselingMatcher:
                 score += 10
         else:
             # Partial credit for general counseling
-            if 'general' in specializations:
+            if 'other' in specializations:
                 score += 20
         
         # 2. Load balancing - prefer counselors with fewer sessions (0-20 points)
@@ -109,7 +109,7 @@ class CounselingMatcher:
         # 5. Crisis handling (0-10 bonus points)
         # If this is a crisis, prioritize counselors specialized in crisis
         if priority >= 10:
-            if 'crisis' in specializations or 'mental_health' in specializations:
+            if 'crisis_substance' in specializations or 'mental_emotional' in specializations:
                 score += 10
         
         return score
@@ -209,7 +209,7 @@ class CounselingMatcher:
         
         # If no matches, suggest general
         if not suggestions:
-            suggestions = ['general']
+            suggestions = ['other']
         
         return suggestions
     

@@ -193,7 +193,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Accept or decline session requests
 
 **Important:**
-🆘 If you're in crisis or having suicidal thoughts, please select "Crisis & Emergency" to be prioritized for support.
+🆘 If you're in crisis or having suicidal thoughts, please select "Crisis & Substance Support" to be prioritized for support.
 If you are in immediate danger, please seek help offline as well:
 • Go to the nearest clinic, hospital, or health centre
 • Reach out to a trusted person (friend, family, fellowship leader, or university staff)
@@ -236,7 +236,7 @@ To create a safe, anonymous space where students can:
 All counselors are fellow students who have been trained and approved by our leadership team. Sessions are completely anonymous—neither party sees personal information about the other.
 
 **Our Topics:**
-We cover spiritual growth, mental health, relationships, academics, identity, addiction, grief, and more. Whatever you're going through, we're here to listen.
+We cover Academic & Career, Mental Health & Emotional, Relationships & Social Life, Life Skills & Personal Growth, Crisis & Substance Support, and other counseling needs. Whatever you're going through, we're here to listen.
 
 *"Carry each other's burdens, and in this way you will fulfill the law of Christ." - Galatians 6:2*
 """
@@ -356,7 +356,7 @@ async def user_gender_selected(update: Update, context: ContextTypes.DEFAULT_TYP
     topic_icon = topic_data.get('icon', '💬')
     
     # For crisis, create session immediately
-    if topic == 'crisis':
+    if topic == 'crisis_substance':
         text = f"""
 **🆘 CRISIS SUPPORT REQUESTED**
 
