@@ -301,29 +301,62 @@ class CounselingDatabase:
         cursor = conn.cursor()
         
         try:
-            # Check if gender column exists in counselors table
-            cursor.execute("PRAGMA table_info(counselors)")
-            counselor_columns = [column[1] for column in cursor.fetchall()]
-            
-            if 'gender' not in counselor_columns:
-                logger.info("Adding gender column to counselors table...")
-                cursor.execute("ALTER TABLE counselors ADD COLUMN gender TEXT DEFAULT 'anonymous'")
-                conn.commit()
-                logger.info("Gender column added to counselors table successfully")
+            if USE_POSTGRES:
+                # PostgreSQL way to check if column exists
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'counselors' AND column_name = 'gender'
+                """)
+                counselor_columns = cursor.fetchall()
+                
+                if not counselor_columns:
+                    logger.info("Adding gender column to counselors table...")
+                    cursor.execute("ALTER TABLE counselors ADD COLUMN gender TEXT DEFAULT 'anonymous'")
+                    conn.commit()
+                    logger.info("Gender column added to counselors table successfully")
+                else:
+                    logger.info("Gender column already exists in counselors table")
+                
+                # Check if gender column exists in users table
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'gender'
+                """)
+                user_columns = cursor.fetchall()
+                
+                if not user_columns:
+                    logger.info("Adding gender column to users table...")
+                    cursor.execute("ALTER TABLE users ADD COLUMN gender TEXT DEFAULT 'anonymous'")
+                    conn.commit()
+                    logger.info("Gender column added to users table successfully")
+                else:
+                    logger.info("Gender column already exists in users table")
             else:
-                logger.info("Gender column already exists in counselors table")
-            
-            # Check if gender column exists in users table
-            cursor.execute("PRAGMA table_info(users)")
-            user_columns = [column[1] for column in cursor.fetchall()]
-            
-            if 'gender' not in user_columns:
-                logger.info("Adding gender column to users table...")
-                cursor.execute("ALTER TABLE users ADD COLUMN gender TEXT DEFAULT 'anonymous'")
-                conn.commit()
-                logger.info("Gender column added to users table successfully")
-            else:
-                logger.info("Gender column already exists in users table")
+                # SQLite way to check if column exists
+                cursor.execute("PRAGMA table_info(counselors)")
+                counselor_columns = [column[1] for column in cursor.fetchall()]
+                
+                if 'gender' not in counselor_columns:
+                    logger.info("Adding gender column to counselors table...")
+                    cursor.execute("ALTER TABLE counselors ADD COLUMN gender TEXT DEFAULT 'anonymous'")
+                    conn.commit()
+                    logger.info("Gender column added to counselors table successfully")
+                else:
+                    logger.info("Gender column already exists in counselors table")
+                
+                # Check if gender column exists in users table
+                cursor.execute("PRAGMA table_info(users)")
+                user_columns = [column[1] for column in cursor.fetchall()]
+                
+                if 'gender' not in user_columns:
+                    logger.info("Adding gender column to users table...")
+                    cursor.execute("ALTER TABLE users ADD COLUMN gender TEXT DEFAULT 'anonymous'")
+                    conn.commit()
+                    logger.info("Gender column added to users table successfully")
+                else:
+                    logger.info("Gender column already exists in users table")
                 
         except Exception as e:
             logger.error(f"Error adding gender column: {e}")
@@ -770,11 +803,12 @@ class CounselingDatabase:
         conn.close()
     
     def get_session(self, session_id: int) -> Optional[Dict]:
-        """Get session data"""
+        """Get session by ID"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('SELECT * FROM counseling_sessions WHERE session_id = ?', (session_id,))
+        cursor.execute(f'SELECT * FROM counseling_sessions WHERE session_id = {ph}', (session_id,))
         row = cursor.fetchone()
         conn.close()
         
@@ -898,26 +932,39 @@ class CounselingDatabase:
         """Add an admin"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('''
-            INSERT OR REPLACE INTO admins (user_id, role, added_by)
-            VALUES (?, ?, ?)
-        ''', (user_id, role, added_by))
+        if USE_POSTGRES:
+            # PostgreSQL UPSERT syntax
+            cursor.execute(f'''
+                INSERT INTO admins (user_id, role, added_by)
+                VALUES ({ph}, {ph}, {ph})
+                ON CONFLICT (user_id) DO UPDATE SET
+                    role = EXCLUDED.role,
+                    added_by = EXCLUDED.added_by
+            ''', (user_id, role, added_by))
+        else:
+            # SQLite INSERT OR REPLACE syntax
+            cursor.execute(f'''
+                INSERT OR REPLACE INTO admins (user_id, role, added_by)
+                VALUES ({ph}, {ph}, {ph})
+            ''', (user_id, role, added_by))
         
         conn.commit()
         conn.close()
-    
+
     def is_admin(self, user_id: int) -> bool:
         """Check if user is admin"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
-        cursor.execute('SELECT user_id FROM admins WHERE user_id = ?', (user_id,))
+        cursor.execute(f'SELECT user_id FROM admins WHERE user_id = {ph}', (user_id,))
         row = cursor.fetchone()
         conn.close()
         
         return row is not None
-    
+
     # ==================== STATISTICS ====================
     
     def get_bot_stats(self) -> Dict:

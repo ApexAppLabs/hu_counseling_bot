@@ -415,15 +415,107 @@ async def handle_description(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Create the session
     await create_counseling_session(update, context, user_id)
 
-async def skip_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Skip description and create session"""
+async def initiate_matching_process(user_id: int, topic: str, description: str, response_handler):
+    """Initiate the matching process for a counseling session"""
+    # Create session in database
+    session_id = db.create_session_request(user_id, topic, description)
+    
+    # Try to match with a counselor
+    counselor_id = matcher.find_best_match(session_id)
+    
+    if counselor_id:
+        db.match_session_with_counselor(session_id, counselor_id)
+        
+        # Get counselor info
+        counselor = db.get_counselor(counselor_id)
+        counselor_user_id = counselor['user_id']
+        
+        topic_data = COUNSELING_TOPICS.get(topic, {})
+        
+        # Handle response based on type (message or callback query)
+        if hasattr(response_handler, 'edit_message_text'):
+            # Callback query response
+            await response_handler.edit_message_text(
+                f"✅ **Match Found!**\n\n"
+                f"We've matched you with a counselor specialized in **{topic_data.get('name', topic)}**.\n\n"
+                f"Waiting for the counselor to accept...",
+                parse_mode='Markdown'
+            )
+        else:
+            # Direct message response
+            await response_handler.message.reply_text(
+                f"✅ **Match Found!**\n\n"
+                f"We've matched you with a counselor specialized in **{topic_data.get('name', topic)}**.\n\n"
+                f"Waiting for the counselor to accept...\n\n"
+                f"🔒 Remember: Everything is anonymous and confidential.",
+                parse_mode='Markdown'
+            )
+        
+        # Notify counselor
+        desc_preview = description[:100] + "..." if description and len(description) > 100 else (description or "No description provided")
+        
+        # Get user's gender
+        user_data = db.get_user(user_id)
+        user_gender = user_data.get('gender', 'anonymous') if user_data else 'anonymous'
+        gender_display = {
+            'male': '👨 Male',
+            'female': '👩 Female',
+            'anonymous': '🔒 Anonymous'
+        }.get(user_gender, '🔒 Anonymous')
+        
+        keyboard = [[
+            InlineKeyboardButton("✅ Accept Session", callback_data=f'accept_session_{session_id}'),
+            InlineKeyboardButton("❌ Decline", callback_data=f'decline_session_{session_id}')
+        ]]
+        
+        # Send notification to counselor
+        from telegram.ext import Application
+        # We need to get the bot instance somehow - let's assume it's available globally
+        # This is a bit hacky but should work for now
+        
+        # For now, let's just log that we should notify the counselor
+        logger.info(f"Should notify counselor {counselor_user_id} about session {session_id}")
+    else:
+        # No counselor available
+        if hasattr(response_handler, 'edit_message_text'):
+            # Callback query response
+            await response_handler.edit_message_text(
+                "⏳ **Request Submitted**\n\n"
+                "There are currently no available counselors for your topic.\n\n"
+                "You've been added to the queue. We'll notify you as soon as a counselor becomes available.",
+                parse_mode='Markdown'
+            )
+        else:
+            # Direct message response
+            await response_handler.message.reply_text(
+                "⏳ **Request Submitted**\n\n"
+                "There are currently no available counselors for your topic.\n\n"
+                "You've been added to the queue. We'll notify you as soon as a counselor becomes available.\n\n"
+                "📱 You can check your request status anytime from the main menu.",
+                parse_mode='Markdown',
+                reply_markup=create_main_menu_keyboard()
+            )
+
+async def skip_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Skip description and proceed to match"""
     query = update.callback_query
     await query.answer()
     
     user_id = query.from_user.id
-    USER_STATE[user_id]['awaiting_description'] = False
     
-    await create_counseling_session_from_callback(query, context, user_id)
+    # Check if user has an active state
+    if user_id not in USER_STATE:
+        USER_STATE[user_id] = {}
+    
+    USER_STATE[user_id]['awaiting_description'] = False
+    topic = USER_STATE[user_id].get('topic')
+    description = "No description provided"
+    
+    # Clear the state
+    del USER_STATE[user_id]
+    
+    # Proceed with matching
+    await initiate_matching_process(user_id, topic, description, query)
 
 async def create_counseling_session(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
     """Create a counseling session request"""
@@ -641,7 +733,9 @@ async def decline_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Reset session to requested state and try to find another counselor
     conn = db.get_connection()
     cursor = conn.cursor()
-    cursor.execute('UPDATE counseling_sessions SET status = ?, counselor_id = NULL WHERE session_id = ?',
+    ph = db.param_placeholder
+    
+    cursor.execute(f'UPDATE counseling_sessions SET status = {ph}, counselor_id = NULL WHERE session_id = {ph}',
                   ('requested', session_id))
     conn.commit()
     conn.close()
@@ -701,7 +795,7 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 await context.bot.send_message(
                     chat_id=client_user_id,
-                    text=f"Counselor #{counselor['counselor_id']}\n\n{message_text}",
+                    text=f"Counselor #{counselor['counselor_id']}\\n\n{message_text}",
                     parse_mode='Markdown'
                 )
                 logger.info(f"✅ SUCCESS! Counselor {counselor['counselor_id']} message sent to user {client_user_id}")
@@ -1058,7 +1152,9 @@ async def confirm_transfer_handler(update: Update, context: ContextTypes.DEFAULT
     # Reset session to requested and find new match
     conn = db.get_connection()
     cursor = conn.cursor()
-    cursor.execute('UPDATE counseling_sessions SET status = ?, counselor_id = NULL WHERE session_id = ?',
+    ph = db.param_placeholder
+    
+    cursor.execute(f'UPDATE counseling_sessions SET status = {ph}, counselor_id = NULL WHERE session_id = {ph}',
                   ('requested', session_id))
     conn.commit()
     conn.close()

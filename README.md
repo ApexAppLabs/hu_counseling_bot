@@ -218,6 +218,16 @@ heroku ps:scale worker=1
 2. Set environment variables
 3. Deploy automatically
 
+### Render (Web Service)
+1. Connect your GitHub repository to Render
+2. Select "Web Service" deployment type
+3. Set the following environment variables:
+   - `BOT_TOKEN`: Your Telegram bot token
+   - `ADMIN_IDS`: Your Telegram user ID(s)
+4. Deploy with default settings
+
+**Note:** Fixed conflict issue where multiple bot instances were running simultaneously by separating bot initialization from execution in the web service wrapper.
+
 ### VPS/Server
 ```bash
 # Using systemd
