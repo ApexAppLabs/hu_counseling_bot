@@ -53,20 +53,23 @@ def run_bot():
         logger.info(f"✅ BOT_TOKEN found (length: {len(bot_token)})")
         logger.info(f"✅ ADMIN_IDS found: {admin_ids}")
         
-        # Import and run bot
+        # Import and initialize bot
         logger.info("Importing bot modules...")
-        from main_counseling_bot import main as bot_main
-        logger.info("Bot modules imported successfully. Starting bot...")
+        from main_counseling_bot import initialize_bot
+        logger.info("Bot modules imported successfully. Initializing bot...")
         
-        # Create and run event loop in this thread
+        # Initialize the bot application
+        app = initialize_bot()
+        if app is None:
+            logger.error("Failed to initialize bot application")
+            return
+            
+        logger.info("Bot initialized successfully. Starting bot in polling mode...")
+        
+        # Run the bot in polling mode in this thread
         import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # Run the bot in the event loop
-        loop.run_until_complete(asyncio.gather(
-            asyncio.to_thread(bot_main)
-        ))
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        app.run_polling(stop_signals=None)
         
     except Exception as e:
         logger.error(f"Bot crashed: {e}")
