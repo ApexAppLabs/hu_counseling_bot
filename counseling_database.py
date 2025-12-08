@@ -587,6 +587,7 @@ class CounselingDatabase:
             return True  # Already removed
 
         status = row['status'] if isinstance(row, dict) else row[0]
+        user_id = row['user_id'] if isinstance(row, dict) else row[1]
 
         # Block delete if counselor has active or matched sessions
         cursor.execute(f'''
@@ -606,12 +607,8 @@ class CounselingDatabase:
             WHERE counselor_id = {ph} AND status = 'matched'
         ''', (counselor_id,))
 
-        # Nullify counselor reference for any non-active sessions (ended, requested, etc.)
-        cursor.execute(f'''
-            UPDATE counseling_sessions
-            SET counselor_id = NULL
-            WHERE counselor_id = {ph} AND status NOT IN ('active')
-        ''', (counselor_id,))
+        # Nullify counselor reference for all remaining sessions (should be safe since no active/matched)
+        cursor.execute(f'''UPDATE counseling_sessions SET counselor_id = NULL WHERE counselor_id = {ph}''', (counselor_id,))
 
         # Remove availability rows
         cursor.execute(f'DELETE FROM counselor_availability WHERE counselor_id = {ph}', (counselor_id,))
@@ -619,29 +616,56 @@ class CounselingDatabase:
         # Finally delete counselor
         cursor.execute(f'DELETE FROM counselors WHERE counselor_id = {ph}', (counselor_id,))
 
-        # Adjust stats
+        # Ban the underlying user to prevent counselor-only access paths
+        if user_id:
+            cursor.execute(f'UPDATE users SET is_banned = 1 WHERE user_id = {ph}', (user_id,))
+
+        # Adjust stats (backend-specific safe decrement)
         try:
             if status == 'approved':
-                cursor.execute('''
-                    UPDATE bot_stats
-                    SET stat_value = CASE 
-                        WHEN stat_name = 'total_counselors' THEN MAX(stat_value - 1, 0)
-                        WHEN stat_name = 'active_counselors' THEN MAX(stat_value - 1, 0)
-                        ELSE stat_value
-                    END,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE stat_name IN ('total_counselors', 'active_counselors')
-                ''')
+                if USE_POSTGRES:
+                    cursor.execute('''
+                        UPDATE bot_stats
+                        SET stat_value = CASE 
+                            WHEN stat_name = 'total_counselors' THEN GREATEST(stat_value - 1, 0)
+                            WHEN stat_name = 'active_counselors' THEN GREATEST(stat_value - 1, 0)
+                            ELSE stat_value
+                        END,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE stat_name IN ('total_counselors', 'active_counselors')
+                    ''')
+                else:
+                    cursor.execute('''
+                        UPDATE bot_stats
+                        SET stat_value = CASE 
+                            WHEN stat_name = 'total_counselors' THEN MAX(stat_value - 1, 0)
+                            WHEN stat_name = 'active_counselors' THEN MAX(stat_value - 1, 0)
+                            ELSE stat_value
+                        END,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE stat_name IN ('total_counselors', 'active_counselors')
+                    ''')
             else:
-                cursor.execute('''
-                    UPDATE bot_stats
-                    SET stat_value = CASE 
-                        WHEN stat_name = 'total_counselors' THEN MAX(stat_value - 1, 0)
-                        ELSE stat_value
-                    END,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE stat_name IN ('total_counselors')
-                ''')
+                if USE_POSTGRES:
+                    cursor.execute('''
+                        UPDATE bot_stats
+                        SET stat_value = CASE 
+                            WHEN stat_name = 'total_counselors' THEN GREATEST(stat_value - 1, 0)
+                            ELSE stat_value
+                        END,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE stat_name IN ('total_counselors')
+                    ''')
+                else:
+                    cursor.execute('''
+                        UPDATE bot_stats
+                        SET stat_value = CASE 
+                            WHEN stat_name = 'total_counselors' THEN MAX(stat_value - 1, 0)
+                            ELSE stat_value
+                        END,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE stat_name IN ('total_counselors')
+                    ''')
         except Exception:
             # Be resilient if bot_stats rows do not exist
             pass
