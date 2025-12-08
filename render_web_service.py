@@ -59,8 +59,8 @@ def run_bot():
         logger.info("Bot modules imported successfully. Initializing bot...")
         
         # Initialize the bot application
-        app = initialize_bot()
-        if app is None:
+        bot_app = initialize_bot()
+        if bot_app is None:
             logger.error("Failed to initialize bot application")
             return
             
@@ -69,7 +69,7 @@ def run_bot():
         # Run the bot in polling mode in this thread
         import asyncio
         asyncio.set_event_loop(asyncio.new_event_loop())
-        app.run_polling(stop_signals=None)
+        bot_app.run_polling(stop_signals=None)
         
     except Exception as e:
         logger.error(f"Bot crashed: {e}")
@@ -83,4 +83,5 @@ logger.info("Bot thread started. Starting Flask server...")
 
 if __name__ == '__main__':
     # Start Flask server (Render will override with gunicorn)
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host='0.0.0.0', port=port)
