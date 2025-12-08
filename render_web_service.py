@@ -116,6 +116,7 @@ def run_bot():
                 url_path=url_path,
                 webhook_url=webhook_url,
                 drop_pending_updates=True,
+                stop_signals=None,  # Disable signal handlers in background thread
                 close_loop=False  # Don't close the loop since we're in a thread
             )
         else:
@@ -130,6 +131,7 @@ def run_bot():
             # Run polling with close_loop=False to prevent signal handling issues
             bot_app.run_polling(
                 drop_pending_updates=True,
+                stop_signals=None,  # Disable signal handlers in background thread
                 close_loop=False  # Don't close the loop since we're in a thread
             )
         
