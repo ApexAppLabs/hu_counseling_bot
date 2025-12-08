@@ -686,6 +686,10 @@ async def accept_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Start the session
     db.start_session(session_id)
+    # Set this session as the counselor's currently active reply target
+    if counselor_user_id not in USER_STATE:
+        USER_STATE[counselor_user_id] = {}
+    USER_STATE[counselor_user_id]['active_session_id'] = session_id
     
     # Notify both parties
     user_id = session['user_id']
@@ -773,7 +777,18 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
     
     if counselor and counselor.get('status') == 'approved':
         logger.info(f"✅ User {user_id} IS counselor {counselor['counselor_id']}, status: approved")
-        session = db.get_active_session_by_counselor(counselor['counselor_id'])
+        counselor_sessions = db.get_active_sessions_by_counselor(counselor['counselor_id'])
+        session = None
+        selected_session_id = None
+        if user_id in USER_STATE:
+            selected_session_id = USER_STATE[user_id].get('active_session_id')
+        if selected_session_id is not None:
+            for s in counselor_sessions:
+                if s.get('session_id') == selected_session_id and s.get('status') in ('matched', 'active'):
+                    session = s
+                    break
+        if session is None:
+            session = db.get_active_session_by_counselor(counselor['counselor_id'])
         
         if session:
             status = session.get('status')
@@ -1101,6 +1116,47 @@ You are currently in an active counseling session. Type your message below to co
 """
     
     keyboard = create_session_control_keyboard(is_user=not is_counselor)
+    await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+
+async def switch_session_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Switch counselor's active session context"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    counselor = db.get_counselor_by_user_id(user_id)
+    if not counselor or counselor['status'] != 'approved':
+        await query.answer("⚠️ Only counselors can switch sessions.", show_alert=True)
+        return
+    
+    session_id = int(query.data.replace('switch_session_', ''))
+    session = db.get_session(session_id)
+    
+    if not session or session.get('counselor_id') != counselor['counselor_id'] or session.get('status') not in ('matched', 'active'):
+        await query.answer("⚠️ This session is no longer available.", show_alert=True)
+        return
+    
+    if user_id not in USER_STATE:
+        USER_STATE[user_id] = {}
+    USER_STATE[user_id]['active_session_id'] = session_id
+    
+    topic_data = COUNSELING_TOPICS.get(session['topic'], {})
+    status_label = 'Active' if session['status'] == 'active' else 'Waiting'
+    
+    text = f"""
+**Session Selected** 💬
+
+You are now replying to:
+
+**Topic:** {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}
+**Session ID:** #{session_id}
+**Status:** {status_label}
+
+Type your message below to chat with this user.
+"""
+    
+    keyboard = create_session_control_keyboard(is_user=False)
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
 
 async def transfer_session_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -103,6 +103,11 @@ DB_PATH = os.getenv("DB_PATH", "hu_counseling.db")
 class CounselingDatabase:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
+        # Global limit for concurrent sessions per counselor (can be overridden via env)
+        try:
+            self.max_sessions_per_counselor = int(os.getenv("MAX_SESSIONS_PER_COUNSELOR", "3"))
+        except ValueError:
+            self.max_sessions_per_counselor = 3
         self.init_database()
         self.migrate_add_gender_column()
     
@@ -409,6 +414,23 @@ class CounselingDatabase:
         conn.close()
         
         return dict(row) if row else None
+
+    def get_active_sessions_by_counselor(self, counselor_id: int) -> List[Dict]:
+        """Get all active or matched sessions for a counselor"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        ph = self.param_placeholder
+        
+        cursor.execute(f'''
+            SELECT * FROM counseling_sessions 
+            WHERE counselor_id = {ph} AND status IN ('matched', 'active')
+            ORDER BY created_at ASC
+        ''', (counselor_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
     
     def update_user_gender(self, user_id: int, gender: str):
         """Update user's gender"""
@@ -631,29 +653,30 @@ class CounselingDatabase:
         """Get list of available counselors, optionally filtered by topic"""
         conn = self.get_connection()
         cursor = conn.cursor()
+        ph = self.param_placeholder
         
         if topic:
-            cursor.execute('''
+            cursor.execute(f'''
                 SELECT c.* FROM counselors c
                 WHERE c.status = 'approved' AND c.is_available = 1
-                AND NOT EXISTS (
-                    SELECT 1 FROM counseling_sessions s 
+                AND (
+                    SELECT COUNT(*) FROM counseling_sessions s 
                     WHERE s.counselor_id = c.counselor_id 
                     AND s.status IN ('matched', 'active')
-                )
+                ) < {ph}
                 ORDER BY c.total_sessions ASC, c.rating_sum DESC
-            ''')
+            ''', (self.max_sessions_per_counselor,))
         else:
-            cursor.execute('''
+            cursor.execute(f'''
                 SELECT c.* FROM counselors c
                 WHERE c.status = 'approved' AND c.is_available = 1
-                AND NOT EXISTS (
-                    SELECT 1 FROM counseling_sessions s 
+                AND (
+                    SELECT COUNT(*) FROM counseling_sessions s 
                     WHERE s.counselor_id = c.counselor_id 
                     AND s.status IN ('matched', 'active')
-                )
+                ) < {ph}
                 ORDER BY c.total_sessions ASC
-            ''')
+            ''', (self.max_sessions_per_counselor,))
         
         rows = cursor.fetchall()
         conn.close()

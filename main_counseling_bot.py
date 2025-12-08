@@ -20,7 +20,7 @@ from hu_counseling_bot import (
     request_counseling, topic_selected, user_gender_selected, handle_description, skip_description,
     accept_session, decline_session, handle_session_message,
     end_session_handler, confirm_end_session,
-    session_info_handler, current_session_handler, transfer_session_handler, confirm_transfer_handler,
+    session_info_handler, current_session_handler, switch_session_handler, transfer_session_handler, confirm_transfer_handler,
     BOT_TOKEN, db, matcher, create_main_menu_keyboard, create_session_control_keyboard,
     ADMIN_IDS
 )
@@ -197,6 +197,7 @@ def _build_application():
     app.add_handler(CallbackQueryHandler(cancel_end_handler, pattern='^cancel_end$'))
     app.add_handler(CallbackQueryHandler(session_info_handler, pattern='^session_info$'))
     app.add_handler(CallbackQueryHandler(current_session_handler, pattern='^current_session$'))
+    app.add_handler(CallbackQueryHandler(switch_session_handler, pattern='^switch_session_'))
     app.add_handler(CallbackQueryHandler(transfer_session_handler, pattern='^transfer_session$'))
     app.add_handler(CallbackQueryHandler(confirm_transfer_handler, pattern='^confirm_transfer_'))
     

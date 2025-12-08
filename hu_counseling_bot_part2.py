@@ -337,13 +337,11 @@ async def counselor_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE
     is_available = counselor['is_available'] == 1
     total_sessions = counselor['total_sessions']
     
-    # Calculate rating
     rating_count = counselor['rating_count']
     rating_sum = counselor['rating_sum']
     avg_rating = (rating_sum / rating_count) if rating_count > 0 else 0
     
-    # Check for active session
-    active_session = db.get_active_session_by_counselor(counselor_id)
+    active_sessions = db.get_active_sessions_by_counselor(counselor_id)
     
     status_icon = "🟢" if is_available else "🔴"
     status_text = "Available" if is_available else "Unavailable"
@@ -357,23 +355,29 @@ async def counselor_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 """
     
-    if active_session:
-        text += f"\n📱 **Active Session**\nYou currently have an active counseling session."
+    if active_sessions:
+        text += f"\n📱 **Active Sessions:** {len(active_sessions)}\nSelect a session below to focus your replies."
     else:
         text += "\n💬 No active sessions"
     
     keyboard = []
     
-    # Toggle availability
     toggle_text = "🔴 Go Offline" if is_available else "🟢 Go Online"
     keyboard.append([InlineKeyboardButton(toggle_text, callback_data='toggle_availability')])
     
-    # My stats
     keyboard.append([InlineKeyboardButton("📊 My Statistics", callback_data='counselor_stats')])
     
-    # View active session if exists
-    if active_session:
-        keyboard.append([InlineKeyboardButton("📱 View Active Session", callback_data='current_session')])
+    if active_sessions:
+        for s in active_sessions[:5]:
+            topic_data = COUNSELING_TOPICS.get(s['topic'], {})
+            topic_icon = topic_data.get('icon', '💬')
+            topic_name = topic_data.get('name', s['topic'])
+            status_label = 'Active' if s['status'] == 'active' else 'Waiting'
+            button_text = f"{topic_icon} #{s['session_id']} - {topic_name} ({status_label})"
+            keyboard.append([
+                InlineKeyboardButton(button_text, callback_data=f'switch_session_{s["session_id"]}')
+            ])
+        keyboard.append([InlineKeyboardButton("📱 Go to Current Session View", callback_data='current_session')])
     
     keyboard.append([InlineKeyboardButton("◀️ Back to Menu", callback_data='main_menu')])
     
@@ -398,8 +402,8 @@ async def toggle_availability(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Check if has any pending or active session
     if current_status and new_status is False:
-        active_session = db.get_active_session_by_counselor(counselor_id)
-        if active_session:
+        active_sessions = db.get_active_sessions_by_counselor(counselor_id)
+        if active_sessions:
             await query.answer("You cannot go offline while you have a pending or active session!", show_alert=True)
             return
     
