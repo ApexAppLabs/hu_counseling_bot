@@ -167,23 +167,8 @@ async def post_shutdown(application):
     
     logger.info("All background services stopped")
 
-def main():
-    """Start the bot"""
-    if not BOT_TOKEN:
-        logger.error("❌ BOT_TOKEN not found in environment variables!")
-        logger.error("Please create a .env file with BOT_TOKEN=your_bot_token")
-        return
-    
-    # Import ADMIN_IDS from hu_counseling_bot to validate
-    from hu_counseling_bot import ADMIN_IDS
-    if not ADMIN_IDS:
-        logger.error("❌ ADMIN_IDS not found or empty in environment variables!")
-        logger.error("Please set ADMIN_IDS in .env file (e.g., ADMIN_IDS=123456789)")
-        logger.error("Without ADMIN_IDS, the admin panel will NOT work!")
-        return
-    
-    logger.info(f"✅ Admin IDs configured: {ADMIN_IDS}")
-    
+def _build_application():
+    """Build the Application and register all handlers"""
     # Build application
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
     
@@ -270,6 +255,28 @@ def main():
     
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler))
     
+    return app
+
+def main():
+    """Start the bot"""
+    if not BOT_TOKEN:
+        logger.error("❌ BOT_TOKEN not found in environment variables!")
+        logger.error("Please create a .env file with BOT_TOKEN=your_bot_token")
+        return
+    
+    # Import ADMIN_IDS from hu_counseling_bot to validate
+    from hu_counseling_bot import ADMIN_IDS
+    if not ADMIN_IDS:
+        logger.error("❌ ADMIN_IDS not found or empty in environment variables!")
+        logger.error("Please set ADMIN_IDS in .env file (e.g., ADMIN_IDS=123456789)")
+        logger.error("Without ADMIN_IDS, the admin panel will NOT work!")
+        return
+    
+    logger.info(f"197 Admin IDs configured: {ADMIN_IDS}")
+    
+    # Build application with all handlers
+    app = _build_application()
+    
     # Start bot
     logger.info("🚀 HU Counseling Service Bot is starting...")
     logger.info(f"📊 Database: {db.db_path}")
@@ -304,13 +311,10 @@ def initialize_bot():
     
     logger.info(f"✅ Admin IDs configured: {ADMIN_IDS}")
     
-    # Build application
-    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
+    # Build application with all handlers so external runners (e.g., bot_runner.py) can use it
+    app = _build_application()
     
-    # NOTE: Handlers are NOT added here to avoid duplication
-    # The render_web_service imports and runs the full bot which includes handlers
-    
-    logger.info("Bot initialized successfully (handlers managed by main application)")
+    logger.info("Bot initialized successfully")
     return app
 
 if __name__ == '__main__':
