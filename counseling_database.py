@@ -616,9 +616,7 @@ class CounselingDatabase:
         # Finally delete counselor
         cursor.execute(f'DELETE FROM counselors WHERE counselor_id = {ph}', (counselor_id,))
 
-        # Ban the underlying user to prevent counselor-only access paths
-        if user_id:
-            cursor.execute(f'UPDATE users SET is_banned = 1 WHERE user_id = {ph}', (user_id,))
+        # Do NOT ban the underlying user; allow them to keep using the bot as a normal user
 
         # Adjust stats (backend-specific safe decrement)
         try:
