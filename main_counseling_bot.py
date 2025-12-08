@@ -132,6 +132,22 @@ async def post_init(application):
     application.bot_data['timeout_manager'] = timeout_manager
     asyncio.create_task(timeout_manager.start())
     logger.info("✅ Session timeout manager started")
+    
+    # Start scheduled tasks manager
+    from scheduled_tasks import ScheduledTasksManager
+    scheduled_tasks_manager = ScheduledTasksManager(db)
+    application.bot_data['scheduled_tasks_manager'] = scheduled_tasks_manager
+    asyncio.create_task(scheduled_tasks_manager.start())
+    logger.info("✅ Scheduled tasks manager started")
+    
+    # Start health ping service (only in Render environment)
+    import os
+    if os.getenv("RENDER") == "true":  # Render sets this automatically
+        from health_ping import HealthPingService
+        health_ping_service = HealthPingService(ping_interval_minutes=int(os.getenv("HEALTH_PING_INTERVAL", "10")))
+        application.bot_data['health_ping_service'] = health_ping_service
+        asyncio.create_task(health_ping_service.start())
+        logger.info("✅ Health ping service started")
 
 def main():
     """Start the bot"""
