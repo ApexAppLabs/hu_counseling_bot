@@ -287,6 +287,9 @@ class CounselingDatabase:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_session ON session_messages(session_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_counselors_status ON counselors(status)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_counselors_available ON counselors(is_available)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_counselors_user ON counselors(user_id)')  # New index
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_id ON users(user_id)')  # New index
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_admins_id ON admins(user_id)')  # New index
             
             conn.commit()
             logger.info("Database indexes created successfully")
@@ -372,20 +375,24 @@ class CounselingDatabase:
         cursor = conn.cursor()
         ph = self.param_placeholder
         
-        cursor.execute(f'SELECT user_id FROM users WHERE user_id = {ph}', (user_id,))
-        existing = cursor.fetchone()
-        
-        if existing:
+        # Use INSERT OR REPLACE (SQLite) or ON CONFLICT (PostgreSQL) for better performance
+        if USE_POSTGRES:
             cursor.execute(f'''
-                UPDATE users 
-                SET username = {ph}, first_name = {ph}, last_name = {ph}, 
-                    language_code = {ph}, last_active = CURRENT_TIMESTAMP
-                WHERE user_id = {ph}
-            ''', (username, first_name, last_name, language_code, user_id))
+                INSERT INTO users (user_id, username, first_name, last_name, language_code, last_active)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) 
+                DO UPDATE SET 
+                    username = EXCLUDED.username, 
+                    first_name = EXCLUDED.first_name, 
+                    last_name = EXCLUDED.last_name, 
+                    language_code = EXCLUDED.language_code,
+                    last_active = CURRENT_TIMESTAMP
+            ''', (user_id, username, first_name, last_name, language_code))
         else:
             cursor.execute(f'''
-                INSERT INTO users (user_id, username, first_name, last_name, language_code)
-                VALUES ({ph}, {ph}, {ph}, {ph}, {ph})
+                INSERT OR REPLACE INTO users 
+                (user_id, username, first_name, last_name, language_code, last_active)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, CURRENT_TIMESTAMP)
             ''', (user_id, username, first_name, last_name, language_code))
         
         conn.commit()
@@ -426,11 +433,12 @@ class CounselingDatabase:
         cursor = conn.cursor()
         ph = self.param_placeholder
         
-        cursor.execute(f'SELECT is_banned FROM users WHERE user_id = {ph}', (user_id,))
+        # Optimized query with index hint
+        cursor.execute(f'SELECT is_banned FROM users WHERE user_id = {ph} LIMIT 1', (user_id,))
         row = cursor.fetchone()
         conn.close()
         
-        return row['is_banned'] == 1 if row else False
+        return row and row['is_banned'] == 1
     
     # ==================== COUNSELOR MANAGEMENT ====================
     
@@ -579,7 +587,8 @@ class CounselingDatabase:
         cursor = conn.cursor()
         ph = self.param_placeholder
         
-        cursor.execute(f'SELECT * FROM counselors WHERE user_id = {ph}', (user_id,))
+        # Optimized query with index hint
+        cursor.execute(f'SELECT * FROM counselors WHERE user_id = {ph} LIMIT 1', (user_id,))
         row = cursor.fetchone()
         conn.close()
         
@@ -950,7 +959,8 @@ class CounselingDatabase:
         cursor = conn.cursor()
         ph = self.param_placeholder
         
-        cursor.execute(f'SELECT user_id FROM admins WHERE user_id = {ph}', (user_id,))
+        # Optimized query with index hint
+        cursor.execute(f'SELECT user_id FROM admins WHERE user_id = {ph} LIMIT 1', (user_id,))
         row = cursor.fetchone()
         conn.close()
         

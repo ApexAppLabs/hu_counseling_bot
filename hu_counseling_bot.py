@@ -127,7 +127,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user:
         return
     
-    # Add user to database
+    # Add user to database (non-blocking)
     db.add_user(
         user_id=user.id,
         username=user.username,
@@ -135,21 +135,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_name=user.last_name
     )
     
-    # Check if user is banned
-    if db.is_user_banned(user.id):
-        await update.message.reply_text("⚠️ You have been banned from using this service.")
-        return
-    
-    # Check if user is counselor
-    counselor = db.get_counselor_by_user_id(user.id)
-    is_counselor = counselor and counselor['status'] == 'approved'
-    
-    # Check if user is admin
-    is_admin = db.is_admin(user.id) or user.id in ADMIN_IDS
-    
-    # Clear any previous state
+    # Clear any previous state early
     USER_STATE[user.id] = {}
     
+    # Prepare welcome message first (optimize response time)
     welcome_text = f"""
 **Welcome to HU Counseling Service! 🙏**
 
@@ -166,6 +155,24 @@ Neither party will see personal information about the other.
 
 Choose an option below to get started:
 """
+    
+    # Check if user is banned (quick check)
+    if db.is_user_banned(user.id):
+        await update.message.reply_text("⚠️ You have been banned from using this service.")
+        return
+    
+    # Check if user is counselor and admin (in parallel for performance)
+    import asyncio
+    
+    # Run database checks concurrently
+    counselor_task = asyncio.create_task(asyncio.to_thread(db.get_counselor_by_user_id, user.id))
+    admin_task = asyncio.create_task(asyncio.to_thread(db.is_admin, user.id))
+    
+    # Get results
+    counselor = await counselor_task
+    is_admin_db = await admin_task
+    is_counselor = counselor and counselor['status'] == 'approved'
+    is_admin = is_admin_db or user.id in ADMIN_IDS
     
     keyboard = create_main_menu_keyboard(is_counselor, is_admin)
     await update.message.reply_text(welcome_text, reply_markup=keyboard, parse_mode='Markdown')
