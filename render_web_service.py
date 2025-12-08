@@ -105,19 +105,33 @@ def run_bot():
             # Mark bot as running
             bot_running = True
             
-            # Run webhook in main thread (this is correct)
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Run webhook with close_loop=False to prevent signal handling issues
             bot_app.run_webhook(
                 listen="0.0.0.0",
                 port=port,
                 url_path=url_path,
                 webhook_url=webhook_url,
-                drop_pending_updates=True
+                drop_pending_updates=True,
+                close_loop=False  # Don't close the loop since we're in a thread
             )
         else:
             # Polling mode (for local development)
             logger.info("📡 Starting in POLLING mode")
             bot_running = True
-            bot_app.run_polling(drop_pending_updates=True)
+            
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Run polling with close_loop=False to prevent signal handling issues
+            bot_app.run_polling(
+                drop_pending_updates=True,
+                close_loop=False  # Don't close the loop since we're in a thread
+            )
         
     except Exception as e:
         logger.error(f"Bot crashed: {e}")
