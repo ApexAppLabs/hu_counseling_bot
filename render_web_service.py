@@ -22,6 +22,7 @@ app = Flask(__name__)
 
 # Global reference to bot application
 bot_app = None
+bot_running = False
 
 @app.route('/')
 def health_check():
@@ -29,7 +30,7 @@ def health_check():
     return {
         "status": "ok",
         "service": "HU Counseling Bot",
-        "bot": "running" if bot_app else "starting"
+        "bot": "running" if bot_running else "starting"
     }, 200
 
 @app.route('/health')
@@ -39,7 +40,7 @@ def health():
 
 def run_bot():
     """Run the bot in this thread"""
-    global bot_app
+    global bot_app, bot_running
     try:
         logger.info("Starting Telegram bot in background thread...")
         
@@ -78,7 +79,7 @@ def run_bot():
             # Webhook configuration for Render deployment
             base_url = os.getenv("WEBHOOK_BASE_URL")
             port = int(os.getenv("PORT", "5000"))
-            url_path = os.getenv("WEBHOOK_PATH", bot_token)
+            url_path = os.getenv("WEBHOOK_PATH", "telegram-webhook")
             
             if not base_url:
                 logger.error("❌ WEBHOOK_BASE_URL not set but USE_WEBHOOK=true. Cannot start bot!")
@@ -91,7 +92,10 @@ def run_bot():
             logger.info(f"🔗 Webhook URL: {webhook_url}")
             logger.info(f"🔌 Listening on 0.0.0.0:{port}, url_path='{url_path}'")
             
-            # Set webhook
+            # Mark bot as running
+            bot_running = True
+            
+            # Run webhook without signal handling (since we're in a background thread)
             import asyncio
             asyncio.set_event_loop(asyncio.new_event_loop())
             bot_app.run_webhook(
@@ -99,13 +103,20 @@ def run_bot():
                 port=port,
                 url_path=url_path,
                 webhook_url=webhook_url,
+                drop_pending_updates=True,
+                close_loop=False  # Don't close the loop since we're in a thread
             )
         else:
             # Polling mode (for local development)
             logger.info("📡 Starting in POLLING mode")
+            bot_running = True
             import asyncio
             asyncio.set_event_loop(asyncio.new_event_loop())
-            bot_app.run_polling(stop_signals=None)
+            bot_app.run_polling(
+                stop_signals=None,  # Disable signal handling in thread
+                drop_pending_updates=True,
+                close_loop=False  # Don't close the loop since we're in a thread
+            )
         
     except Exception as e:
         logger.error(f"Bot crashed: {e}")

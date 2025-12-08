@@ -15,7 +15,7 @@ Set these environment variables in your Render dashboard:
 | `DATABASE_URL` | ✅ Yes | None | PostgreSQL connection string (from Neon or other provider) |
 | `WEBHOOK_BASE_URL` | ✅ Yes | None | Your Render service URL (e.g., `https://your-app.onrender.com`) |
 | `USE_WEBHOOK` | ✅ Yes | `true` | Must be "true" for Render deployment |
-| `WEBHOOK_PATH` | Optional | BOT_TOKEN | Custom webhook path (defaults to bot token) |
+| `WEBHOOK_PATH` | Optional | `telegram-webhook` | Custom webhook path (defaults to "telegram-webhook") |
 | `PORT` | Optional | `5000` | Port for webhook listener (Render sets automatically) |
 
 ## Setting Environment Variables in Render Dashboard
@@ -51,7 +51,7 @@ This is crucial for proper webhook functionality. It should be:
 Example: `https://hu-counseling-bot.onrender.com`
 
 ### WEBHOOK_PATH
-Optional custom path for webhooks. If not set, defaults to your BOT_TOKEN.
+Optional custom path for webhooks. If not set, defaults to `telegram-webhook`.
 
 ### PORT
 Render automatically sets this. Do not manually configure unless you have specific requirements.
@@ -98,7 +98,7 @@ Successful deployment should show:
 ✅ BOT_TOKEN found (length: 46)
 ✅ ADMIN_IDS found: 123456789
 🌐 Starting in WEBHOOK mode
-🔗 Webhook URL: https://your-app.onrender.com/your_bot_token
+🔗 Webhook URL: https://your-app.onrender.com/telegram-webhook
 ```
 
 ## Support
