@@ -69,12 +69,43 @@ def run_bot():
             logger.error("Failed to initialize bot application")
             return
             
-        logger.info("Bot initialized successfully. Starting bot in polling mode...")
+        logger.info("Bot initialized successfully. Starting bot...")
         
-        # Run the bot in polling mode in this thread
-        import asyncio
-        asyncio.set_event_loop(asyncio.new_event_loop())
-        bot_app.run_polling(stop_signals=None)
+        # Check if we should use webhook mode (Render deployment)
+        use_webhook = os.getenv("USE_WEBHOOK", "true").lower() == "true"
+        
+        if use_webhook:
+            # Webhook configuration for Render deployment
+            base_url = os.getenv("WEBHOOK_BASE_URL")
+            port = int(os.getenv("PORT", "5000"))
+            url_path = os.getenv("WEBHOOK_PATH", bot_token)
+            
+            if not base_url:
+                logger.error("❌ WEBHOOK_BASE_URL not set but USE_WEBHOOK=true. Cannot start bot!")
+                return
+            
+            base_url = base_url.rstrip("/")
+            webhook_url = f"{base_url}/{url_path}"
+            
+            logger.info("🌐 Starting in WEBHOOK mode")
+            logger.info(f"🔗 Webhook URL: {webhook_url}")
+            logger.info(f"🔌 Listening on 0.0.0.0:{port}, url_path='{url_path}'")
+            
+            # Set webhook
+            import asyncio
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            bot_app.run_webhook(
+                listen="0.0.0.0",
+                port=port,
+                url_path=url_path,
+                webhook_url=webhook_url,
+            )
+        else:
+            # Polling mode (for local development)
+            logger.info("📡 Starting in POLLING mode")
+            import asyncio
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            bot_app.run_polling(stop_signals=None)
         
     except Exception as e:
         logger.error(f"Bot crashed: {e}")

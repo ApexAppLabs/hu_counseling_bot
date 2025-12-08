@@ -273,43 +273,17 @@ def main():
     # Start bot
     logger.info("🚀 HU Counseling Service Bot is starting...")
     logger.info(f"📊 Database: {db.db_path}")
-
-    use_webhook = os.getenv("USE_WEBHOOK", "false").lower() == "true"
-
-    if use_webhook:
-        # Webhook configuration for public deployment (e.g., Render)
-        base_url = os.getenv("WEBHOOK_BASE_URL")
-        port = int(os.getenv("PORT", "5000"))
-        url_path = os.getenv("WEBHOOK_PATH", BOT_TOKEN)
-
-        if not base_url:
-            logger.error("❌ WEBHOOK_BASE_URL not set but USE_WEBHOOK=true. Falling back to polling.")
-            use_webhook = False
-        else:
-            base_url = base_url.rstrip("/")
-            webhook_url = f"{base_url}/{url_path}"
-
-            logger.info("🌐 Starting in WEBHOOK mode")
-            logger.info(f"🔗 Webhook URL: {webhook_url}")
-            logger.info(f"🔌 Listening on 0.0.0.0:{port}, url_path='{url_path}'")
-
-            app.run_webhook(
-                listen="0.0.0.0",
-                port=port,
-                url_path=url_path,
-                webhook_url=webhook_url,
-            )
-            return
-
-    # Default: polling mode (for local development or when webhook not configured)
-    logger.info("📡 Starting in POLLING mode")
+    
+    # For local development, we can start in polling mode
+    # For Render deployment, webhook mode is handled in render_web_service.py
+    logger.info("📡 Starting in POLLING mode (for local development)")
     logger.info("✅ Ready to serve!")
-
+    
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         asyncio.set_event_loop(asyncio.new_event_loop())
-
+    
     app.run_polling(stop_signals=None)
 
 # Add a new function that can be called without starting the bot immediately
