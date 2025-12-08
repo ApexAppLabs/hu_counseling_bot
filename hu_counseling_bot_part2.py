@@ -949,12 +949,16 @@ async def admin_view_counselor(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("⚠️ Counselor not found.")
         return
     
-    # Parse specializations
+    # counselor['specializations'] is already a Python list from the database layer.
+    # For safety, handle the case where it might still be stored as a JSON string.
     import json
-    try:
-        counselor['specializations'] = json.loads(counselor['specializations'])
-    except:
-        counselor['specializations'] = []
+    specs_value = counselor.get('specializations', [])
+    if isinstance(specs_value, str):
+        try:
+            specs_value = json.loads(specs_value) or []
+        except Exception:
+            specs_value = []
+    counselor['specializations'] = specs_value
     
     # Get additional info
     conn = db.get_connection()
