@@ -1,1 +1,1 @@
-web: gunicorn render_web_service:app --bind 0.0.0.0:$PORT
+web: gunicorn render_web_service:app --bind 0.0.0.0:
