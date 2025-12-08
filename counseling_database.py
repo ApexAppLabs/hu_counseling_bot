@@ -571,6 +571,85 @@ class CounselingDatabase:
         conn.close()
         
         logger.warning(f"Counselor {counselor_id} BANNED by admin {admin_id}. Reason: {reason}")
+
+    def delete_counselor(self, counselor_id: int, admin_id: int) -> bool:
+        """Completely remove a counselor and clean up references.
+        Returns True if deleted, False if blocked (e.g., active sessions exist)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        ph = self.param_placeholder
+
+        # Fetch counselor row first (for stats and validation)
+        cursor.execute(f'SELECT status, user_id FROM counselors WHERE counselor_id = {ph}', (counselor_id,))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return True  # Already removed
+
+        status = row['status'] if isinstance(row, dict) else row[0]
+
+        # Block delete if counselor has active or matched sessions
+        cursor.execute(f'''
+            SELECT COUNT(*) AS cnt FROM counseling_sessions
+            WHERE counselor_id = {ph} AND status IN ('matched', 'active')
+        ''', (counselor_id,))
+        cnt_row = cursor.fetchone()
+        active_cnt = cnt_row['cnt'] if isinstance(cnt_row, dict) else cnt_row[0]
+        if active_cnt and active_cnt > 0:
+            conn.close()
+            return False
+
+        # Reset matched sessions to requested and nullify counselor reference
+        cursor.execute(f'''
+            UPDATE counseling_sessions
+            SET status = 'requested', counselor_id = NULL
+            WHERE counselor_id = {ph} AND status = 'matched'
+        ''', (counselor_id,))
+
+        # Nullify counselor reference for any non-active sessions (ended, requested, etc.)
+        cursor.execute(f'''
+            UPDATE counseling_sessions
+            SET counselor_id = NULL
+            WHERE counselor_id = {ph} AND status NOT IN ('active')
+        ''', (counselor_id,))
+
+        # Remove availability rows
+        cursor.execute(f'DELETE FROM counselor_availability WHERE counselor_id = {ph}', (counselor_id,))
+
+        # Finally delete counselor
+        cursor.execute(f'DELETE FROM counselors WHERE counselor_id = {ph}', (counselor_id,))
+
+        # Adjust stats
+        try:
+            if status == 'approved':
+                cursor.execute('''
+                    UPDATE bot_stats
+                    SET stat_value = CASE 
+                        WHEN stat_name = 'total_counselors' THEN MAX(stat_value - 1, 0)
+                        WHEN stat_name = 'active_counselors' THEN MAX(stat_value - 1, 0)
+                        ELSE stat_value
+                    END,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE stat_name IN ('total_counselors', 'active_counselors')
+                ''')
+            else:
+                cursor.execute('''
+                    UPDATE bot_stats
+                    SET stat_value = CASE 
+                        WHEN stat_name = 'total_counselors' THEN MAX(stat_value - 1, 0)
+                        ELSE stat_value
+                    END,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE stat_name IN ('total_counselors')
+                ''')
+        except Exception:
+            # Be resilient if bot_stats rows do not exist
+            pass
+
+        conn.commit()
+        conn.close()
+        logger.warning(f"Counselor {counselor_id} DELETED by admin {admin_id}")
+        return True
     
     def update_counselor_info(self, counselor_id: int, display_name: str = None, bio: str = None, specializations: List[str] = None):
         """Update counselor information"""

@@ -32,7 +32,7 @@ from hu_counseling_bot_part2 import (
     review_counselor, approve_counselor_handler, reject_counselor_handler,
     admin_detailed_stats, admin_manage_counselors, admin_pending_sessions,
     admin_view_counselor, admin_deactivate_counselor, admin_reactivate_counselor,
-    admin_ban_counselor, admin_edit_counselor
+    admin_delete_counselor, admin_edit_counselor
 )
 
 # Setup comprehensive logging with file rotation
@@ -230,7 +230,7 @@ def _build_application():
     app.add_handler(CallbackQueryHandler(admin_view_counselor, pattern='^admin_view_counselor_'))
     app.add_handler(CallbackQueryHandler(admin_deactivate_counselor, pattern='^admin_deactivate_'))
     app.add_handler(CallbackQueryHandler(admin_reactivate_counselor, pattern='^admin_reactivate_'))
-    app.add_handler(CallbackQueryHandler(admin_ban_counselor, pattern='^admin_ban_'))
+    app.add_handler(CallbackQueryHandler(admin_delete_counselor, pattern='^admin_delete_'))
     app.add_handler(CallbackQueryHandler(admin_edit_counselor, pattern='^admin_edit_'))
     
     # Message handlers (for descriptions and session messages)

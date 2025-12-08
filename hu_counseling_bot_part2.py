@@ -91,7 +91,7 @@ async def counselor_select_specialization(update: Update, context: ContextTypes.
     text = """
 **Select Your Areas of Expertise** 📚
 
-Choose the topics you feel equipped to counsel on. Select at least 2 areas.
+Choose the topics you feel equipped to counsel on. Select 1-2 areas.
 
 💡 *Tip: Only choose areas where you have personal experience or strong biblical knowledge.*
 
@@ -119,8 +119,8 @@ async def toggle_specialization(update: Update, context: ContextTypes.DEFAULT_TY
     selected = USER_STATE[user_id]['specializations']
     
     if spec == 'done':
-        if len(selected) < 2:
-            await query.answer("Please select at least 2 areas of expertise.", show_alert=True)
+        if len(selected) < 1:
+            await query.answer("Please select at least 1 area of expertise.", show_alert=True)
             return
         
         # Move to gender selection step
@@ -131,8 +131,8 @@ async def toggle_specialization(update: Update, context: ContextTypes.DEFAULT_TY
     if spec in selected:
         selected.remove(spec)
     else:
-        if len(selected) >= 5:
-            await query.answer("You can select up to 5 areas maximum.", show_alert=True)
+        if len(selected) >= 2:
+            await query.answer("You can select up to 2 areas maximum.", show_alert=True)
             return
         selected.append(spec)
     
@@ -144,9 +144,9 @@ async def toggle_specialization(update: Update, context: ContextTypes.DEFAULT_TY
     text = f"""
 **Select Your Areas of Expertise** 📚
 
-**Selected:** {len(selected)}/5
+**Selected:** {len(selected)}/2
 
-Choose the topics you feel equipped to counsel on. Select at least 2 areas.
+Choose the topics you feel equipped to counsel on. Select 1-2 areas.
 
 Click the topics to select/deselect:
 """
@@ -1033,15 +1033,15 @@ async def admin_view_counselor(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if counselor['status'] == 'approved':
         keyboard.append([InlineKeyboardButton("🔴 Deactivate", callback_data=f'admin_deactivate_{counselor_id}')])
-        keyboard.append([InlineKeyboardButton("🚫 Ban", callback_data=f'admin_ban_{counselor_id}')])
+        keyboard.append([InlineKeyboardButton("🗑️ Delete", callback_data=f'admin_delete_{counselor_id}')])
     elif counselor['status'] == 'deactivated':
         keyboard.append([InlineKeyboardButton("🟢 Reactivate", callback_data=f'admin_reactivate_{counselor_id}')])
-        keyboard.append([InlineKeyboardButton("🚫 Ban", callback_data=f'admin_ban_{counselor_id}')])
+        keyboard.append([InlineKeyboardButton("🗑️ Delete", callback_data=f'admin_delete_{counselor_id}')])
     elif counselor['status'] == 'pending':
         keyboard.append([InlineKeyboardButton("✅ Approve", callback_data=f'approve_counselor_{counselor_id}')])
         keyboard.append([InlineKeyboardButton("❌ Reject", callback_data=f'reject_counselor_{counselor_id}')])
     elif counselor['status'] == 'banned':
-        keyboard.append([InlineKeyboardButton("🟢 Unban", callback_data=f'admin_reactivate_{counselor_id}')])
+        keyboard.append([InlineKeyboardButton("🗑️ Delete", callback_data=f'admin_delete_{counselor_id}')])
     
     keyboard.append([InlineKeyboardButton("✏️ Edit Info", callback_data=f'admin_edit_{counselor_id}')])
     keyboard.append([InlineKeyboardButton("◀️ Back", callback_data='admin_manage_counselors')])
@@ -1120,12 +1120,12 @@ async def admin_reactivate_counselor(update: Update, context: ContextTypes.DEFAU
         parse_mode='Markdown'
     )
 
-async def admin_ban_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ban a counselor permanently"""
+async def admin_delete_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Delete a counselor account completely"""
     query = update.callback_query
     await query.answer()
     
-    counselor_id = int(query.data.replace('admin_ban_', ''))
+    counselor_id = int(query.data.replace('admin_delete_', ''))
     admin_id = query.from_user.id
     
     from hu_counseling_bot import db
@@ -1135,21 +1135,23 @@ async def admin_ban_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text("⚠️ Counselor not found.")
         return
     
-    db.ban_counselor(counselor_id, admin_id, reason="Admin decision")
-    
-    # Notify counselor
-    await context.bot.send_message(
-        chat_id=counselor['user_id'],
-        text="🚫 **Account Banned**\n\n"
-             "Your counselor account has been permanently banned.\n\n"
-             "You cannot access counseling features. Please contact fellowship leadership if you have questions.",
-        parse_mode='Markdown'
-    )
-    
+    ok = db.delete_counselor(counselor_id, admin_id)
+    if not ok:
+        await query.answer("Cannot delete: counselor has active or matched sessions.", show_alert=True)
+        return
+
+    try:
+        await context.bot.send_message(
+            chat_id=counselor['user_id'],
+            text="🗑️ **Account Deleted**\n\nYour counselor account has been removed by an admin.",
+            parse_mode='Markdown'
+        )
+    except Exception:
+        pass
+
     await query.edit_message_text(
-        f"🚫 **Counselor Banned**\n\n"
-        f"Counselor #{counselor_id} ({counselor['display_name']}) has been permanently banned.\n\n"
-        f"They have been notified and cannot access counseling features.",
+        f"🗑️ **Counselor Deleted**\n\n"
+        f"Counselor #{counselor_id} ({counselor['display_name']}) has been removed from the system.",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Back to List", callback_data='admin_manage_counselors')
         ]]),
@@ -1200,5 +1202,5 @@ __all__ = [
     'review_counselor', 'approve_counselor_handler', 'reject_counselor_handler',
     'admin_detailed_stats', 'admin_manage_counselors', 'admin_pending_sessions',
     'admin_view_counselor', 'admin_deactivate_counselor', 'admin_reactivate_counselor',
-    'admin_ban_counselor', 'admin_edit_counselor'
+    'admin_delete_counselor', 'admin_edit_counselor'
 ]
