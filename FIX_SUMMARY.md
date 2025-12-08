@@ -19,6 +19,7 @@ According to Python's asyncio documentation and the python-telegram-bot library:
 ### 1. Restructured `render_web_service.py`
 - Changed the approach to run the Telegram bot in the main thread
 - Moved the Flask health check server to a background thread
+- Exposed Flask app at module level for Gunicorn compatibility
 - Removed Gunicorn dependency for the main application
 
 ### 2. Updated Procfile
@@ -37,7 +38,7 @@ web: python render_web_service.py
 - Telegram bot runs in the main thread as required by webhook mode
 - Proper error handling and logging for both services
 
-### 4. Updated Documentation
+### 4. Enhanced Documentation
 - Modified `RENDER_DEPLOYMENT_CONFIG.md` to reflect the new startup process
 - Added explanation of the threading changes and why they were necessary
 
@@ -46,6 +47,7 @@ web: python render_web_service.py
 ### render_web_service.py
 - Complete rewrite to prioritize Telegram bot in main thread
 - Flask server moved to background thread
+- Module-level Flask app exposed for Gunicorn compatibility
 - Proper asyncio event loop handling
 - Enhanced error logging and tracing
 
@@ -62,6 +64,7 @@ web: python render_web_service.py
 - New threading approach aligns with python-telegram-bot requirements
 - Flask health checks still available on `/` and `/health` endpoints
 - Telegram bot webhook properly configured with Render environment variables
+- Module-level Flask app available for Gunicorn compatibility
 
 ## Expected Outcome
 The bot should now properly:
@@ -71,3 +74,9 @@ The bot should now properly:
 4. Handle graceful shutdown of background services
 
 This fix addresses the core threading issue that was preventing the bot from functioning properly on Render.
+
+## Additional Notes
+If Render continues to use the old Gunicorn command despite the updated Procfile, it may be due to:
+1. Cached build configuration - Try clearing Render's build cache
+2. Repository not updated - Ensure all changes are pushed to GitHub
+3. Manual deployment configuration in Render dashboard - Check Render service settings
