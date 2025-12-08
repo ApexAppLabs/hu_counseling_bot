@@ -20,32 +20,25 @@ logger = logging.getLogger(__name__)
 # Create Flask app at module level for Gunicorn compatibility
 app = Flask(__name__)
 
+# Global reference to bot application
+bot_app = None
+bot_running = False
+bot_thread = None
+
 @app.route('/')
 def health_check():
     """Health check endpoint for Render Web Service"""
     return {
         "status": "ok",
         "service": "HU Counseling Bot",
-        "flask": "running"
+        "flask": "running",
+        "bot": "running" if bot_running else "starting"
     }, 200
 
 @app.route('/health')
 def health():
     """Alternative health endpoint"""
     return "OK", 200
-
-# Global reference to bot application
-bot_app = None
-bot_running = False
-
-def run_flask():
-    """Run Flask app in a separate thread"""
-    try:
-        port = int(os.getenv("PORT", "5000"))
-        logger.info(f"Starting Flask server on port {port}")
-        app.run(host='0.0.0.0', port=port, threaded=True)
-    except Exception as e:
-        logger.error(f"Flask server error: {e}")
 
 def run_bot():
     """Run the bot in this thread"""
@@ -123,16 +116,26 @@ def run_bot():
         import traceback
         logger.error(f"Full error: {traceback.format_exc()}")
 
+def start_bot_if_needed():
+    """Start the bot in a background thread if not already started"""
+    global bot_thread, bot_running
+    if bot_thread is None or not bot_thread.is_alive():
+        logger.info("Starting Telegram bot in background thread...")
+        bot_thread = threading.Thread(target=run_bot, daemon=True)
+        bot_thread.start()
+        logger.info("Bot thread started")
+
+# Start the bot when the Flask app starts
+@app.before_first_request
+def initialize_services():
+    """Initialize all services when the Flask app starts"""
+    start_bot_if_needed()
+
 def main():
     """Main entry point - run bot as primary service with Flask as secondary"""
     logger.info("Starting HU Counseling Bot service...")
     
-    # Start Flask in background thread for health checks
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
-    logger.info("Flask server started in background thread")
-    
-    # Run bot in main thread
+    # Start bot in main thread for direct execution
     run_bot()
 
 if __name__ == '__main__':
