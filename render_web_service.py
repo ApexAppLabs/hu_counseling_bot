@@ -24,10 +24,15 @@ app = Flask(__name__)
 bot_app = None
 bot_running = False
 bot_thread = None
+services_initialized = False
+initialization_lock = threading.Lock()
 
 @app.route('/')
 def health_check():
     """Health check endpoint for Render Web Service"""
+    # Initialize services on first request if not already done
+    initialize_services_on_demand()
+    
     return {
         "status": "ok",
         "service": "HU Counseling Bot",
@@ -38,6 +43,9 @@ def health_check():
 @app.route('/health')
 def health():
     """Alternative health endpoint"""
+    # Initialize services on first request if not already done
+    initialize_services_on_demand()
+    
     return "OK", 200
 
 def run_bot():
@@ -125,11 +133,14 @@ def start_bot_if_needed():
         bot_thread.start()
         logger.info("Bot thread started")
 
-# Start the bot when the Flask app starts
-@app.before_first_request
-def initialize_services():
-    """Initialize all services when the Flask app starts"""
-    start_bot_if_needed()
+def initialize_services_on_demand():
+    """Initialize all services when the first request comes in"""
+    global services_initialized
+    with initialization_lock:
+        if not services_initialized:
+            logger.info("Initializing services on first request...")
+            start_bot_if_needed()
+            services_initialized = True
 
 def main():
     """Main entry point - run bot as primary service with Flask as secondary"""

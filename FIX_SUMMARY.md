@@ -1,14 +1,19 @@
 # Fix Summary: Resolving Webhook Threading Issue
 
 ## Problem
-The Telegram bot was not responding to messages after deployment to Render. The logs showed the error:
-```
-set_wakeup_fd only works in main thread of the main interpreter
-```
+The Telegram bot was not responding to messages after deployment to Render. Multiple issues were identified:
 
-This error occurred because the webhook functionality requires running in the main thread, but we were trying to run it in a background thread.
+1. **Threading Issue**: 
+   - Error: `set_wakeup_fd only works in main thread of the main interpreter`
+   - Cause: Webhook mode requires the main thread for proper signal handling
 
-Additionally, there was an `AppImportError` because the Flask app wasn't properly exposed at the module level.
+2. **Gunicorn Compatibility Issue**:
+   - Error: `AppImportError: Failed to find attribute 'app' in 'render_web_service'`
+   - Cause: Flask app wasn't properly exposed at the module level
+
+3. **Flask Version Compatibility Issue**:
+   - Error: `'Flask' object has no attribute 'before_first_request'`
+   - Cause: Using deprecated decorator removed in Flask 3.0+
 
 ## Root Cause
 According to Python's asyncio documentation and the python-telegram-bot library:
@@ -16,6 +21,7 @@ According to Python's asyncio documentation and the python-telegram-bot library:
 - Running `run_webhook()` in a background thread causes signal handling conflicts
 - The `set_wakeup_fd` function can only be called from the main thread
 - Gunicorn requires the Flask app to be exposed at the module level
+- Flask 3.0+ removed the `@app.before_first_request` decorator
 
 ## Solution Implemented
 
@@ -24,7 +30,8 @@ According to Python's asyncio documentation and the python-telegram-bot library:
 - Implemented dual-mode operation:
   - When run via Gunicorn: Flask app starts and initializes Telegram bot on first request
   - When run directly: Telegram bot runs in main thread as required
-- Used `@app.before_first_request` to initialize services when needed
+- Used manual lazy initialization for Flask 3.0+ compatibility
+- Added thread-safe initialization with locks
 
 ### 2. Maintained Gunicorn Startup Command
 Kept the standard Render deployment command:
@@ -36,6 +43,7 @@ gunicorn render_web_service:app --bind 0.0.0.0:$PORT
 - Telegram bot runs in main thread when executed directly
 - Telegram bot runs in background thread when Flask app starts via Gunicorn
 - Proper synchronization to prevent multiple bot instances
+- Thread-safe lazy initialization
 
 ### 4. Improved Documentation
 - Updated `RENDER_DEPLOYMENT_CONFIG.md` with new deployment details
@@ -46,9 +54,10 @@ gunicorn render_web_service:app --bind 0.0.0.0:$PORT
 ### render_web_service.py
 - Flask app exposed at module level for Gunicorn compatibility
 - Dual-mode operation supporting both direct execution and Gunicorn deployment
+- Manual lazy initialization for Flask 3.0+ compatibility
+- Thread-safe initialization with locks to prevent race conditions
 - Proper asyncio event loop handling for both modes
 - Enhanced error logging and tracing
-- Automatic bot initialization on first request when using Flask
 
 ### Procfile
 - Maintained as `web: python render_web_service.py` for direct execution option
@@ -63,6 +72,7 @@ gunicorn render_web_service:app --bind 0.0.0.0:$PORT
 - Python file compiles without syntax errors
 - Flask app properly exposed for Gunicorn compatibility
 - Dual-mode operation works correctly
+- Flask 3.0+ compatible with manual lazy initialization
 - Health check endpoints available on `/` and `/health`
 - Telegram bot webhook properly configured with Render environment variables
 
@@ -73,7 +83,7 @@ The bot should now properly:
 3. Maintain health check endpoints for Render
 4. Handle graceful shutdown of background services
 
-This fix addresses both the core threading issue and the Gunicorn compatibility issue that were preventing the bot from functioning properly on Render.
+This fix addresses all identified issues that were preventing the bot from functioning properly on Render.
 
 ## Additional Notes
 If you want to use direct execution instead of Gunicorn:
