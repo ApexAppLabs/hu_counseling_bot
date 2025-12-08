@@ -1,1 +1,1 @@
-web: python render_web_service.py
+web: gunicorn render_web_service:app --bind 0.0.0.0:$PORT
