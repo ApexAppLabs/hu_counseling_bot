@@ -84,12 +84,23 @@ def run_bot():
         
         # Check if we should use webhook mode (Render deployment)
         use_webhook = os.getenv("USE_WEBHOOK", "true").lower() == "true"
+        logger.info(f"USE_WEBHOOK environment variable: {os.getenv('USE_WEBHOOK')}")
+        logger.info(f"Webhook mode enabled: {use_webhook}")
         
         if use_webhook:
             # Webhook configuration for Render deployment
             base_url = os.getenv("WEBHOOK_BASE_URL")
             port = int(os.getenv("PORT", "5000"))
             url_path = os.getenv("WEBHOOK_PATH", "telegram-webhook")
+            
+            # Log the actual port being used
+            logger.info(f"PORT environment variable: {os.getenv('PORT')}")
+            logger.info(f"Attempting to use port: {port}")
+            
+            # Validate port is in valid range
+            if port < 1024 or port > 65535:
+                logger.warning(f"Port {port} is outside valid range, using default 5000")
+                port = 5000
             
             if not base_url:
                 logger.error("❌ WEBHOOK_BASE_URL not set but USE_WEBHOOK=true. Cannot start bot!")
@@ -110,15 +121,33 @@ def run_bot():
             asyncio.set_event_loop(loop)
             
             # Run webhook with close_loop=False to prevent signal handling issues
-            bot_app.run_webhook(
-                listen="0.0.0.0",
-                port=port,
-                url_path=url_path,
-                webhook_url=webhook_url,
-                drop_pending_updates=True,
-                stop_signals=None,  # Disable signal handlers in background thread
-                close_loop=False  # Don't close the loop since we're in a thread
-            )
+            try:
+                bot_app.run_webhook(
+                    listen="0.0.0.0",
+                    port=port,
+                    url_path=url_path,
+                    webhook_url=webhook_url,
+                    drop_pending_updates=True,
+                    stop_signals=None,  # Disable signal handlers in background thread
+                    close_loop=False  # Don't close the loop since we're in a thread
+                )
+            except OSError as e:
+                if e.errno == 98:  # Address already in use
+                    logger.error(f"Port {port} is already in use. Please check if another instance is running.")
+                    # Try a different port
+                    alt_port = port + 1
+                    logger.info(f"Trying alternative port: {alt_port}")
+                    bot_app.run_webhook(
+                        listen="0.0.0.0",
+                        port=alt_port,
+                        url_path=url_path,
+                        webhook_url=webhook_url,
+                        drop_pending_updates=True,
+                        stop_signals=None,
+                        close_loop=False
+                    )
+                else:
+                    raise
         else:
             # Polling mode (for local development)
             logger.info("📡 Starting in POLLING mode")
@@ -159,11 +188,12 @@ def initialize_services_on_demand():
             services_initialized = True
 
 def main():
-    """Main entry point - run bot as primary service with Flask as secondary"""
+    """Main entry point - run Flask as primary service with bot in background"""
     logger.info("Starting HU Counseling Bot service...")
     
-    # Start bot in main thread for direct execution
-    run_bot()
+    # Start Flask app (this will be handled by Gunicorn)
+    # The bot will be started on-demand via the Flask routes
+    pass
 
 if __name__ == '__main__':
     main()
