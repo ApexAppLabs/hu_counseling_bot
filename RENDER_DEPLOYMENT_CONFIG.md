@@ -64,6 +64,14 @@ Render will automatically check your service health. The application includes:
 
 Both return success responses when the service is running.
 
+## Startup Process
+
+The application now starts with:
+1. Flask server running in a background thread for health checks
+2. Telegram bot running in the main thread for webhook handling
+
+This resolves the `set_wakeup_fd only works in main thread` error that occurred when trying to run webhooks in background threads.
+
 ## Troubleshooting
 
 ### Bot Not Responding

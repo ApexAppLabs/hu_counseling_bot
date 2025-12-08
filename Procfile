@@ -1,1 +1,1 @@
-web: gunicorn render_web_service:app
+web: python render_web_service.py
