@@ -149,6 +149,24 @@ async def post_init(application):
         asyncio.create_task(health_ping_service.start())
         logger.info("✅ Health ping service started")
 
+async def post_shutdown(application):
+    """Post shutdown - Clean up background tasks"""
+    logger.info("Shutting down background services...")
+    
+    # Stop health ping service
+    if 'health_ping_service' in application.bot_data:
+        await application.bot_data['health_ping_service'].stop()
+    
+    # Stop scheduled tasks manager
+    if 'scheduled_tasks_manager' in application.bot_data:
+        await application.bot_data['scheduled_tasks_manager'].stop()
+    
+    # Stop session timeout manager
+    if 'timeout_manager' in application.bot_data:
+        await application.bot_data['timeout_manager'].stop()
+    
+    logger.info("All background services stopped")
+
 def main():
     """Start the bot"""
     if not BOT_TOKEN:
@@ -167,7 +185,7 @@ def main():
     logger.info(f"✅ Admin IDs configured: {ADMIN_IDS}")
     
     # Build application
-    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
     
     # Command handlers
     app.add_handler(CommandHandler("start", start))

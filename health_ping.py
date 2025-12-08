@@ -50,9 +50,20 @@ class HealthPingService:
     async def ping_self(self):
         """Ping the service's own health endpoint"""
         try:
-            # Get the service URL from environment or default to localhost
-            service_url = os.getenv("HEALTH_PING_URL", "http://localhost:5000")
-            health_endpoint = f"{service_url}/health"
+            # Get the service URL from environment
+            service_url = os.getenv("HEALTH_PING_URL")
+            
+            # If not set, try to construct from RENDER environment variables
+            if not service_url:
+                render_url = os.getenv("RENDER_EXTERNAL_URL")
+                if render_url:
+                    service_url = render_url
+                else:
+                    # Fallback to localhost for local testing
+                    port = os.getenv("PORT", "5000")
+                    service_url = f"http://localhost:{port}"
+            
+            health_endpoint = f"{service_url.rstrip('/')}/health"
             
             logger.debug(f"Pinging health endpoint: {health_endpoint}")
             
@@ -76,7 +87,7 @@ async def post_init(application):
     # Start health ping service (only in Render environment)
     if os.getenv("RENDER") == "true":  # Render sets this automatically
         from health_ping import HealthPingService
-        health_ping_service = HealthPingService(ping_interval_minutes=10)
+        health_ping_service = HealthPingService(ping_interval_minutes=int(os.getenv("HEALTH_PING_INTERVAL", "10")))
         application.bot_data['health_ping_service'] = health_ping_service
         asyncio.create_task(health_ping_service.start())
         logger.info("✅ Health ping service started")

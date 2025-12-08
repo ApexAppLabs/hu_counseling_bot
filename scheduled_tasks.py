@@ -151,7 +151,6 @@ class ScheduledTasksManager:
                             
                             if session and counselor:
                                 from telegram import Bot
-                                import os
                                 
                                 bot_token = os.getenv('BOT_TOKEN')
                                 if bot_token:
