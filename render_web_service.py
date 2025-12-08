@@ -6,7 +6,6 @@ Runs the Telegram bot in a background thread while serving a minimal HTTP endpoi
 import threading
 import logging
 import os
-import signal
 import sys
 from flask import Flask
 from dotenv import load_dotenv
@@ -37,15 +36,6 @@ def health_check():
 def health():
     """Alternative health endpoint"""
     return "OK", 200
-
-def signal_handler(sig, frame):
-    """Handle shutdown signals"""
-    logger.info("Received shutdown signal")
-    if bot_app:
-        logger.info("Stopping bot application...")
-        # Note: In a real implementation, we would properly shut down the bot
-        # For now, we'll just log that shutdown was requested
-    sys.exit(0)
 
 def run_bot():
     """Run the bot in this thread"""
@@ -80,10 +70,6 @@ def run_bot():
             return
             
         logger.info("Bot initialized successfully. Starting bot in polling mode...")
-        
-        # Set up signal handlers for graceful shutdown
-        signal.signal(signal.SIGTERM, signal_handler)
-        signal.signal(signal.SIGINT, signal_handler)
         
         # Run the bot in polling mode in this thread
         import asyncio

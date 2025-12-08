@@ -331,7 +331,7 @@ def initialize_bot():
     logger.info(f"✅ Admin IDs configured: {ADMIN_IDS}")
     
     # Build application
-    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
     
     # NOTE: Handlers are NOT added here to avoid duplication
     # The render_web_service imports and runs the full bot which includes handlers
