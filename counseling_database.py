@@ -392,13 +392,13 @@ class CounselingDatabase:
                     last_name = EXCLUDED.last_name, 
                     language_code = EXCLUDED.language_code,
                     last_active = CURRENT_TIMESTAMP
-            ''', (user_id, username, first_name, last_name, language_code))
+            ''', (user_id, None, None, None, language_code))
         else:
             cursor.execute(f'''
                 INSERT OR REPLACE INTO users 
                 (user_id, username, first_name, last_name, language_code, last_active)
                 VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, CURRENT_TIMESTAMP)
-            ''', (user_id, username, first_name, last_name, language_code))
+            ''', (user_id, None, None, None, language_code))
         
         conn.commit()
         conn.close()

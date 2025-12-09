@@ -596,7 +596,7 @@ async def admin_pending_counselors(update: Update, context: ContextTypes.DEFAULT
     
     for app in pending[:5]:  # Show first 5
         text += f"**Application #{app['counselor_id']}**\n"
-        text += f"User: {app.get('first_name', 'Unknown')}\n"
+        text += f"User: {app.get('first_name') or 'Unknown'}\n"
         text += f"Bio: {app['bio'][:100]}...\n\n"
     
     keyboard = []
