@@ -372,8 +372,8 @@ You've selected: {topic_icon} **{topic_name}**
 ⚠️ **If you are in immediate danger or feel you might harm yourself or someone else, please seek help around you immediately.**
 
 You can:
-• Go to the nearest clinic, hospital, or health centre
-• Reach out to a trusted person (friend, family, fellowship leader, or university staff)
+• Go to the nearest clinic or health centre
+• Reach out to a trusted person (friend, fellowship family, fellowship leader)
 • Contact local emergency services or campus security in your area
 
 We're connecting you with a counselor right now. If you'd like, you can briefly describe your situation while we find someone:
