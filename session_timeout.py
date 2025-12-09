@@ -87,13 +87,22 @@ class SessionTimeoutManager:
                 # Determine the reference time
                 if last_message_str:
                     # Use last message time
-                    last_activity = datetime.fromisoformat(last_message_str)
+                    if isinstance(last_message_str, str):
+                        last_activity = datetime.fromisoformat(last_message_str)
+                    else:
+                        last_activity = last_message_str  # Already a datetime object
                 elif session['started_at']:
                     # Use session start time if no messages
-                    last_activity = datetime.fromisoformat(session['started_at'])
+                    if isinstance(session['started_at'], str):
+                        last_activity = datetime.fromisoformat(session['started_at'])
+                    else:
+                        last_activity = session['started_at']
                 elif session['matched_at']:
                     # Use match time if not started
-                    last_activity = datetime.fromisoformat(session['matched_at'])
+                    if isinstance(session['matched_at'], str):
+                        last_activity = datetime.fromisoformat(session['matched_at'])
+                    else:
+                        last_activity = session['matched_at']
                 else:
                     # Skip if no time reference
                     continue
