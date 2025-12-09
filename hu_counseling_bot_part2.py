@@ -409,6 +409,42 @@ async def toggle_availability(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     db.set_counselor_availability(counselor_id, new_status)
     
+    # If counselor just came online, immediately try to auto-match pending sessions
+    if new_status:
+        from hu_counseling_bot import matcher
+        pending_sessions = db.get_pending_sessions(limit=20)
+        for session in pending_sessions:
+            session_id = session['session_id']
+            matched_counselor_id = matcher.find_best_match(session_id)
+            if not matched_counselor_id:
+                continue
+
+            db.match_session_with_counselor(session_id, matched_counselor_id)
+            counselor_match = db.get_counselor(matched_counselor_id)
+            if not counselor_match:
+                continue
+
+            topic_data = COUNSELING_TOPICS.get(session['topic'], {})
+            desc = session.get('description') or 'No description provided'
+            preview = desc[:100] + ('...' if len(desc) > 100 else '')
+
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Accept Session", callback_data=f'accept_session_{session_id}'),
+                InlineKeyboardButton("❌ Decline", callback_data=f'decline_session_{session_id}')
+            ]])
+
+            await context.bot.send_message(
+                chat_id=counselor_match['user_id'],
+                text=(
+                    f"**🔔 New Counseling Request**\n\n"
+                    f"**Topic:** {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}\n"
+                    f"**Description:** {preview}\n\n"
+                    f"Would you like to accept this session?"
+                ),
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+    
     status_text = "🟢 Online" if new_status else "🔴 Offline"
     await query.answer(f"Status changed to {status_text}")
     
