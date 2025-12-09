@@ -382,7 +382,8 @@ We're connecting you with a counselor right now. If you'd like, you can briefly 
 """
         
         keyboard = [[
-            InlineKeyboardButton("⏭️ Skip - Connect Now", callback_data='skip_description')
+            InlineKeyboardButton("⏭️ Skip - Connect Now", callback_data='skip_description'),
+            InlineKeyboardButton("❌ Cancel", callback_data='main_menu')
         ]]
         
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
