@@ -44,9 +44,9 @@ def retry_on_locked(max_retries=3, delay=0.5):
 # Counseling topics for student gospel fellowship (6 high-level categories)
 COUNSELING_TOPICS = {
     'academic_career': {
-        'name': 'Academic & Career',
+        'name': 'Academic',
         'icon': '📚',
-        'description': 'Academic struggles, exams, university life, career choices, work and finances',
+        'description': 'Study skills and exams, university life, career exploration and planning, internships and work readiness, budgeting and student finances.',
         'keywords': [
             'study', 'exam', 'academic', 'school', 'university', 'grades',
             'career', 'job', 'future', 'work', 'profession', 'internship',
@@ -54,36 +54,36 @@ COUNSELING_TOPICS = {
         ]
     },
     'mental_emotional': {
-        'name': 'Mental Health & Emotional',
+        'name': 'Psychological',
         'icon': '🧠',
-        'description': 'Anxiety, depression, stress, grief, trauma, emotional struggles',
+        'description': 'Anxiety and depression, stress management, grief and loss, trauma recovery, mood and emotional regulation, coping strategies.',
         'keywords': [
             'anxiety', 'depression', 'stress', 'mental', 'emotional', 'overwhelmed',
             'grief', 'loss', 'death', 'mourning', 'trauma', 'sad'
         ]
     },
     'relationships_social': {
-        'name': 'Relationships & Social Life',
+        'name': 'Life Skills',
         'icon': '💑',
-        'description': 'Friendships, family, dating, social life and community',
+        'description': 'Communication skills, relationships and dating, conflict resolution, family dynamics, friendships, community and social life.',
         'keywords': [
             'relationship', 'dating', 'marriage', 'boyfriend', 'girlfriend', 'friend',
             'family', 'parents', 'mother', 'father', 'sibling', 'home'
         ]
     },
     'life_skills_growth': {
-        'name': 'Life Skills & Personal Growth',
+        'name': 'Spiritual',
         'icon': '🌱',
-        'description': 'Identity, purpose, habits, faith walk, life decisions and personal growth',
+        'description': 'Faith and discipleship, identity and purpose, spiritual habits and disciplines, wisdom for life decisions, personal growth.',
         'keywords': [
             'purpose', 'calling', 'identity', 'worth', 'meaning', 'direction',
             'habit', 'discipline', 'time management', 'growth', 'improve'
         ]
     },
     'crisis_substance': {
-        'name': 'Crisis & Substance Support',
+        'name': 'Addiction and Crises',
         'icon': '🆘',
-        'description': 'Immediate crisis, safety concerns, suicidal thoughts, and substance use struggles',
+        'description': 'Immediate crisis and safety support, suicidal thoughts or self-harm, substance use and addiction, pornography and compulsive behaviors, emergency guidance.',
         'keywords': [
             'crisis', 'emergency', 'suicide', 'hurt', 'danger', 'help',
             'addiction', 'substance', 'alcohol', 'drugs', 'smoking', 'porn'
@@ -93,7 +93,7 @@ COUNSELING_TOPICS = {
     'other': {
         'name': 'Other Counseling',
         'icon': '💬',
-        'description': "If you're not sure where your situation fits, choose this.",
+        'description': "If you're unsure which category fits your situation, choose this and we'll guide you.",
         'keywords': ['other', 'general', 'advice', 'help', 'talk']
     }
 }
