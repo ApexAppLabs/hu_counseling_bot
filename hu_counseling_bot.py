@@ -483,21 +483,19 @@ async def initiate_matching_process(user_id: int, topic: str, description: str, 
         # For now, let's just log that we should notify the counselor
         logger.info(f"Should notify counselor {counselor_user_id} about session {session_id}")
     else:
-        # No counselor available
+        # No counselor available RIGHT NOW (request is placed in the waiting queue)
         if hasattr(response_handler, 'edit_message_text'):
             # Callback query response
             await response_handler.edit_message_text(
                 "⏳ **Request Submitted**\n\n"
-                "There are currently no available counselors for your topic.\n\n"
-                "You've been added to the queue. We'll notify you as soon as a counselor becomes available.",
+                "Your request has been submitted. A counselor will review and accept it shortly. You’re now in the waiting queue.",
                 parse_mode='Markdown'
             )
         else:
             # Direct message response
             await response_handler.message.reply_text(
                 "⏳ **Request Submitted**\n\n"
-                "There are currently no available counselors for your topic.\n\n"
-                "You've been added to the queue. We'll notify you as soon as a counselor becomes available.\n\n"
+                "Your request has been submitted. A counselor will review and accept it shortly. You’re now in the waiting queue.\n\n"
                 "📱 You can check your request status anytime from the main menu.",
                 parse_mode='Markdown',
                 reply_markup=create_main_menu_keyboard()

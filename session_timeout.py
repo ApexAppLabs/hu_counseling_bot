@@ -51,74 +51,7 @@ class SessionTimeoutManager:
     
     async def check_timeouts(self):
         """Check for and end timed-out sessions"""
-        try:
-            conn = self.db.get_connection()
-            cursor = conn.cursor()
-            ph = self.db.param_placeholder
-            
-            # Calculate timeout threshold
-            timeout_threshold = datetime.now() - timedelta(hours=self.timeout_hours)
-            
-            # Get all active sessions
-            cursor.execute('''
-                SELECT session_id, user_id, counselor_id, created_at, matched_at, started_at
-                FROM counseling_sessions 
-                WHERE status = 'active'
-            ''')
-            
-            active_sessions = cursor.fetchall()
-            
-            timed_out_count = 0
-            
-            for session_row in active_sessions:
-                session = dict(session_row)
-                session_id = session['session_id']
-                
-                # Get last message time
-                cursor.execute(f'''
-                    SELECT MAX(created_at) as last_message
-                    FROM session_messages
-                    WHERE session_id = {ph}
-                ''', (session_id,))
-                
-                result = cursor.fetchone()
-                last_message_str = result['last_message'] if result else None
-                
-                # Determine the reference time
-                if last_message_str:
-                    # Use last message time
-                    if isinstance(last_message_str, str):
-                        last_activity = datetime.fromisoformat(last_message_str)
-                    else:
-                        last_activity = last_message_str  # Already a datetime object
-                elif session['started_at']:
-                    # Use session start time if no messages
-                    if isinstance(session['started_at'], str):
-                        last_activity = datetime.fromisoformat(session['started_at'])
-                    else:
-                        last_activity = session['started_at']
-                elif session['matched_at']:
-                    # Use match time if not started
-                    if isinstance(session['matched_at'], str):
-                        last_activity = datetime.fromisoformat(session['matched_at'])
-                    else:
-                        last_activity = session['matched_at']
-                else:
-                    # Skip if no time reference
-                    continue
-                
-                # Check if session has timed out
-                if last_activity < timeout_threshold:
-                    await self.timeout_session(session)
-                    timed_out_count += 1
-            
-            if timed_out_count > 0:
-                logger.info(f"Timed out {timed_out_count} inactive sessions")
-                
-        except Exception as e:
-            logger.error(f"Error checking session timeouts: {e}")
-        finally:
-            conn.close()
+        return
     
     async def timeout_session(self, session):
         """
