@@ -7,6 +7,8 @@ import sqlite3
 import json
 import time
 import os
+import socket
+import urllib.parse
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Tuple
 import logging
@@ -114,11 +116,32 @@ class CounselingDatabase:
     def get_connection(self):
         """Get database connection with proper timeout and WAL mode"""
         if USE_POSTGRES:
-            conn = psycopg2.connect(
-            os.getenv("DATABASE_URL"),
-            sslmode="require",
-            connect_timeout=10)
-                        # DictCursor so rows behave like dicts (similar to sqlite3.Row)
+            dsn = os.getenv("DATABASE_URL")
+            if not dsn:
+                raise RuntimeError("DATABASE_URL is set but empty")
+
+            # Some environments (e.g. certain Render runtimes) may not have IPv6 egress.
+            # If the DB hostname resolves to an IPv6 address first, psycopg2 may try IPv6
+            # and fail with "Network is unreachable". Force an IPv4 hostaddr when possible.
+            connect_kwargs = {
+                "dsn": dsn,
+                "sslmode": "require",
+                "connect_timeout": 10,
+            }
+
+            try:
+                parsed = urllib.parse.urlparse(dsn)
+                hostname = parsed.hostname
+                if hostname:
+                    infos = socket.getaddrinfo(hostname, parsed.port or 5432, family=socket.AF_INET, type=socket.SOCK_STREAM)
+                    if infos:
+                        ipv4 = infos[0][4][0]
+                        connect_kwargs["hostaddr"] = ipv4
+            except Exception as e:
+                logger.warning(f"PostgreSQL IPv4 resolution failed; falling back to default resolution: {e}")
+
+            conn = psycopg2.connect(**connect_kwargs)
+            # DictCursor so rows behave like dicts (similar to sqlite3.Row)
             conn.cursor_factory = psycopg2.extras.DictCursor
             return conn
         else:
