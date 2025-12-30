@@ -129,16 +129,33 @@ class CounselingDatabase:
                 "connect_timeout": 10,
             }
 
-            try:
-                parsed = urllib.parse.urlparse(dsn)
-                hostname = parsed.hostname
-                if hostname:
-                    infos = socket.getaddrinfo(hostname, parsed.port or 5432, family=socket.AF_INET, type=socket.SOCK_STREAM)
-                    if infos:
-                        ipv4 = infos[0][4][0]
-                        connect_kwargs["hostaddr"] = ipv4
-            except Exception as e:
-                logger.warning(f"PostgreSQL IPv4 resolution failed; falling back to default resolution: {e}")
+            # Hard override (preferred) when DNS doesn't provide an A record.
+            # You can set this in Render env vars.
+            forced_hostaddr = (
+                os.getenv("DATABASE_HOSTADDR")
+                or os.getenv("PGHOSTADDR")
+            )
+            if forced_hostaddr:
+                connect_kwargs["hostaddr"] = forced_hostaddr
+            else:
+                try:
+                    parsed = urllib.parse.urlparse(dsn)
+                    hostname = parsed.hostname
+                    port = parsed.port or 5432
+                    if hostname:
+                        infos = socket.getaddrinfo(
+                            hostname,
+                            port,
+                            family=socket.AF_INET,
+                            type=socket.SOCK_STREAM,
+                        )
+                        if infos:
+                            ipv4 = infos[0][4][0]
+                            connect_kwargs["hostaddr"] = ipv4
+                except Exception as e:
+                    logger.warning(
+                        f"PostgreSQL IPv4 resolution failed; falling back to default resolution: {e}"
+                    )
 
             conn = psycopg2.connect(**connect_kwargs)
             # DictCursor so rows behave like dicts (similar to sqlite3.Row)
