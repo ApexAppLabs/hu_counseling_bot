@@ -114,8 +114,11 @@ class CounselingDatabase:
     def get_connection(self):
         """Get database connection with proper timeout and WAL mode"""
         if USE_POSTGRES:
-            conn = psycopg2.connect(os.getenv("DATABASE_URL"),sslmode="require")
-            # DictCursor so rows behave like dicts (similar to sqlite3.Row)
+            conn = psycopg2.connect(
+            os.getenv("DATABASE_URL"),
+            sslmode="require",
+            connect_timeout=10)
+                        # DictCursor so rows behave like dicts (similar to sqlite3.Row)
             conn.cursor_factory = psycopg2.extras.DictCursor
             return conn
         else:
