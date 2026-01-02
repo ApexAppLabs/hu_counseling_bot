@@ -116,51 +116,28 @@ class CounselingDatabase:
     def get_connection(self):
         """Get database connection with proper timeout and WAL mode"""
         if USE_POSTGRES:
-            dsn = os.getenv("DATABASE_URL")
-            if not dsn:
-                raise RuntimeError("DATABASE_URL is set but empty")
+            db_url = os.getenv("DATABASE_URL", "")
+            
+            # Fix common mistake where user pastes the full psql command
+            if db_url.strip().startswith("psql"):
+                logger.warning("Detected 'psql' command in DATABASE_URL. Attempting to extract connection string...")
+                parts = db_url.split()
+                for part in parts:
+                    clean_part = part.strip("'\"")
+                    if clean_part.startswith("postgres://") or clean_part.startswith("postgresql://"):
+                        db_url = clean_part
+                        logger.info(f"Extracted connection string: {db_url[:15]}...")
+                        break
+            
+            try:
+                conn = psycopg2.connect(db_url)
+                # DictCursor so rows behave like dicts (similar to sqlite3.Row)
+                conn.cursor_factory = psycopg2.extras.DictCursor
+                return conn
+            except psycopg2.OperationalError as e:
+                logger.error(f"Failed to connect to PostgreSQL: {e}")
+                raise
 
-            # Some environments (e.g. certain Render runtimes) may not have IPv6 egress.
-            # If the DB hostname resolves to an IPv6 address first, psycopg2 may try IPv6
-            # and fail with "Network is unreachable". Force an IPv4 hostaddr when possible.
-            connect_kwargs = {
-                "dsn": dsn,
-                "sslmode": "require",
-                "connect_timeout": 10,
-            }
-
-            # Hard override (preferred) when DNS doesn't provide an A record.
-            # You can set this in Render env vars.
-            forced_hostaddr = (
-                os.getenv("DATABASE_HOSTADDR")
-                or os.getenv("PGHOSTADDR")
-            )
-            if forced_hostaddr:
-                connect_kwargs["hostaddr"] = forced_hostaddr
-            else:
-                try:
-                    parsed = urllib.parse.urlparse(dsn)
-                    hostname = parsed.hostname
-                    port = parsed.port or 5432
-                    if hostname:
-                        infos = socket.getaddrinfo(
-                            hostname,
-                            port,
-                            family=socket.AF_INET,
-                            type=socket.SOCK_STREAM,
-                        )
-                        if infos:
-                            ipv4 = infos[0][4][0]
-                            connect_kwargs["hostaddr"] = ipv4
-                except Exception as e:
-                    logger.warning(
-                        f"PostgreSQL IPv4 resolution failed; falling back to default resolution: {e}"
-                    )
-
-            conn = psycopg2.connect(**connect_kwargs)
-            # DictCursor so rows behave like dicts (similar to sqlite3.Row)
-            conn.cursor_factory = psycopg2.extras.DictCursor
-            return conn
         else:
             conn = sqlite3.connect(
                 self.db_path,
