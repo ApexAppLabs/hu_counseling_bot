@@ -32,7 +32,10 @@ from hu_counseling_bot_part2 import (
     review_counselor, approve_counselor_handler, reject_counselor_handler,
     admin_detailed_stats, admin_manage_counselors, admin_pending_sessions,
     admin_view_counselor, admin_deactivate_counselor, admin_reactivate_counselor,
-    admin_delete_counselor, admin_edit_counselor
+    admin_delete_counselor, admin_edit_counselor,
+    counselor_edit_profile, edit_counselor_name, edit_counselor_bio, edit_counselor_specs,
+    edit_counselor_gender, handle_counselor_edit_message, toggle_edit_specialization,
+    edit_gender_selected
 )
 
 # Setup comprehensive logging with file rotation
@@ -212,6 +215,14 @@ def _build_application():
     app.add_handler(CallbackQueryHandler(toggle_availability, pattern='^toggle_availability$'))
     app.add_handler(CallbackQueryHandler(counselor_stats, pattern='^counselor_stats$'))
     
+    # Counselor edit profile
+    app.add_handler(CallbackQueryHandler(counselor_edit_profile, pattern='^counselor_edit_profile$'))
+    app.add_handler(CallbackQueryHandler(edit_counselor_name, pattern='^edit_counselor_name$'))
+    app.add_handler(CallbackQueryHandler(edit_counselor_bio, pattern='^edit_counselor_bio$'))
+    app.add_handler(CallbackQueryHandler(edit_counselor_specs, pattern='^edit_counselor_specs$'))
+    app.add_handler(CallbackQueryHandler(edit_counselor_gender, pattern='^edit_counselor_gender$'))
+    app.add_handler(CallbackQueryHandler(edit_gender_selected, pattern='^edit_gender_'))
+    
     # Rating system
     app.add_handler(CallbackQueryHandler(rate_session_start, pattern='^rate_session_'))
     app.add_handler(CallbackQueryHandler(submit_rating, pattern='^rating_'))
@@ -244,6 +255,11 @@ def _build_application():
         # Check if awaiting bio
         if user_id in USER_STATE and USER_STATE[user_id].get('awaiting_bio'):
             await handle_counselor_bio(update, context)
+            return
+        
+        # Check if editing profile (name or bio)
+        if user_id in USER_STATE and USER_STATE[user_id].get('editing') in ['name', 'bio']:
+            await handle_counselor_edit_message(update, context)
             return
         
         # Check if awaiting description
