@@ -102,7 +102,7 @@ Click the topics to select/deselect:
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
 
 async def toggle_specialization(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Toggle a specialization selection"""
+    """Toggle a specialization selection (handles both registration and editing)"""
     query = update.callback_query
     await query.answer()
     
@@ -113,6 +113,13 @@ async def toggle_specialization(update: Update, context: ContextTypes.DEFAULT_TY
     if user_id not in USER_STATE:
         USER_STATE[user_id] = {}
     
+    # Check if in edit mode
+    if USER_STATE[user_id].get('editing') == 'specs':
+        # Delegate to edit handler
+        await toggle_edit_specialization(update, context)
+        return
+    
+    # Otherwise, handle as registration
     if 'specializations' not in USER_STATE[user_id]:
         USER_STATE[user_id]['specializations'] = []
     
@@ -366,6 +373,7 @@ async def counselor_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard.append([InlineKeyboardButton(toggle_text, callback_data='toggle_availability')])
     
     keyboard.append([InlineKeyboardButton("📊 My Statistics", callback_data='counselor_stats')])
+    keyboard.append([InlineKeyboardButton("✏️ Edit Profile", callback_data='counselor_edit_profile')])
     
     if active_sessions:
         for s in active_sessions[:5]:
@@ -1230,6 +1238,376 @@ async def admin_edit_counselor(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
+# ==================== COUNSELOR EDIT PROFILE ====================
+
+async def counselor_edit_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show counselor profile edit menu"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import db
+    counselor = db.get_counselor_by_user_id(user_id)
+    
+    if not counselor or counselor['status'] != 'approved':
+        await query.edit_message_text(
+            "⚠️ You are not an approved counselor.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back", callback_data='main_menu')
+            ]])
+        )
+        return
+    
+    specs = counselor['specializations']
+    spec_text = '\n'.join([f"• {COUNSELING_TOPICS[s]['icon']} {COUNSELING_TOPICS[s]['name']}" for s in specs])
+    
+    gender_display = {
+        'male': '👨 Male',
+        'female': '👩 Female',
+        'anonymous': '🔒 Anonymous'
+    }.get(counselor.get('gender', 'anonymous'), '🔒 Anonymous')
+    
+    text = f"""
+**Edit Your Profile** ✏️
+
+**Current Information:**
+
+**Display Name:** {counselor['display_name']}
+**Gender:** {gender_display}
+
+**Bio:**
+{counselor['bio']}
+
+**Specializations:**
+{spec_text}
+
+**What would you like to edit?**
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("✏️ Edit Display Name", callback_data='edit_counselor_name')],
+        [InlineKeyboardButton("📝 Edit Bio", callback_data='edit_counselor_bio')],
+        [InlineKeyboardButton("📚 Edit Specializations", callback_data='edit_counselor_specs')],
+        [InlineKeyboardButton("👤 Edit Gender", callback_data='edit_counselor_gender')],
+        [InlineKeyboardButton("◀️ Back to Dashboard", callback_data='counselor_dashboard')]
+    ]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def edit_counselor_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start editing counselor display name"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    text = """
+**Edit Display Name** ✏️
+
+Please type your new display name and send it as a message.
+
+Your display name will be shown to users when they rate their session.
+
+*Type your new display name:*
+"""
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data='counselor_edit_profile')]]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    
+    from hu_counseling_bot import USER_STATE
+    if user_id not in USER_STATE:
+        USER_STATE[user_id] = {}
+    USER_STATE[user_id]['editing'] = 'name'
+
+async def edit_counselor_bio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start editing counselor bio"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import db
+    counselor = db.get_counselor_by_user_id(user_id)
+    
+    text = f"""
+**Edit Bio** 📝
+
+**Current Bio:**
+{counselor['bio']}
+
+Please type your new bio (2-3 sentences, 50-500 characters) and send it as a message.
+
+Tell us about:
+• Your year/major
+• Why you want to be a counselor
+• Any relevant experience
+
+*Type your new bio:*
+"""
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data='counselor_edit_profile')]]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    
+    from hu_counseling_bot import USER_STATE
+    if user_id not in USER_STATE:
+        USER_STATE[user_id] = {}
+    USER_STATE[user_id]['editing'] = 'bio'
+
+async def edit_counselor_specs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start editing counselor specializations"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import db, USER_STATE, create_counselor_specialization_keyboard
+    counselor = db.get_counselor_by_user_id(user_id)
+    
+    if user_id not in USER_STATE:
+        USER_STATE[user_id] = {}
+    
+    # Initialize with current specializations
+    USER_STATE[user_id]['editing'] = 'specs'
+    USER_STATE[user_id]['specializations'] = counselor['specializations'].copy()
+    
+    selected = USER_STATE[user_id]['specializations']
+    
+    text = f"""
+**Edit Specializations** 📚
+
+**Currently Selected:** {len(selected)}/2
+
+Choose the topics you feel equipped to counsel on. Select 1-2 areas.
+
+💡 *Tip: Only choose areas where you have personal experience or strong biblical knowledge.*
+
+Click the topics to select/deselect:
+"""
+    
+    keyboard = create_counselor_specialization_keyboard(selected)
+    await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+
+async def edit_counselor_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start editing counselor gender"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import db
+    counselor = db.get_counselor_by_user_id(user_id)
+    
+    current_gender = counselor.get('gender', 'anonymous')
+    gender_display = {
+        'male': '👨 Male',
+        'female': '👩 Female',
+        'anonymous': '🔒 Anonymous'
+    }.get(current_gender, '🔒 Anonymous')
+    
+    text = f"""
+**Edit Gender** 👤
+
+**Current:** {gender_display}
+
+Select your new gender preference:
+
+**Why we ask:**
+• Some topics require gender-specific advice
+• Users may have preferences for their counselor
+• Helps maintain appropriate boundaries
+
+Choose an option:
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("👨 Male", callback_data='edit_gender_male')],
+        [InlineKeyboardButton("👩 Female", callback_data='edit_gender_female')],
+        [InlineKeyboardButton("🔒 Prefer not to say (Anonymous)", callback_data='edit_gender_anonymous')],
+        [InlineKeyboardButton("◀️ Back", callback_data='counselor_edit_profile')]
+    ]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def handle_counselor_edit_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle counselor profile edit text inputs"""
+    user_id = update.effective_user.id
+    
+    from hu_counseling_bot import USER_STATE, db
+    
+    if user_id not in USER_STATE or 'editing' not in USER_STATE[user_id]:
+        return
+    
+    editing = USER_STATE[user_id].get('editing')
+    
+    if editing == 'name':
+        new_name = update.message.text.strip()
+        
+        if len(new_name) < 2:
+            await update.message.reply_text("⚠️ Display name is too short. Please use at least 2 characters.")
+            return
+        
+        if len(new_name) > 50:
+            await update.message.reply_text("⚠️ Display name is too long. Please keep it under 50 characters.")
+            return
+        
+        counselor = db.get_counselor_by_user_id(user_id)
+        db.update_counselor_info(counselor['counselor_id'], display_name=new_name)
+        
+        USER_STATE[user_id] = {}
+        
+        await update.message.reply_text(
+            f"✅ **Display Name Updated!**\n\n"
+            f"Your new display name is: **{new_name}**\n\n"
+            f"This will be shown to users when they rate their session.",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back to Profile", callback_data='counselor_edit_profile')
+            ]])
+        )
+    
+    elif editing == 'bio':
+        new_bio = update.message.text.strip()
+        
+        if len(new_bio) < 50:
+            await update.message.reply_text(
+                "⚠️ Your bio is too short. Please write at least 50 characters (about 2-3 sentences)."
+            )
+            return
+        
+        if len(new_bio) > 500:
+            await update.message.reply_text(
+                "⚠️ Your bio is too long. Please keep it under 500 characters."
+            )
+            return
+        
+        counselor = db.get_counselor_by_user_id(user_id)
+        db.update_counselor_info(counselor['counselor_id'], bio=new_bio)
+        
+        USER_STATE[user_id] = {}
+        
+        await update.message.reply_text(
+            f"✅ **Bio Updated!**\n\n"
+            f"Your new bio:\n{new_bio}\n\n"
+            f"This will help admins and the matching system understand your expertise.",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back to Profile", callback_data='counselor_edit_profile')
+            ]])
+        )
+
+async def toggle_edit_specialization(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggle a specialization when editing"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    spec = query.data.replace('spec_', '')
+    
+    from hu_counseling_bot import USER_STATE, db, create_counselor_specialization_keyboard
+    
+    if user_id not in USER_STATE or USER_STATE[user_id].get('editing') != 'specs':
+        # Not in edit mode, use the regular toggle for registration
+        return
+    
+    if 'specializations' not in USER_STATE[user_id]:
+        USER_STATE[user_id]['specializations'] = []
+    
+    selected = USER_STATE[user_id]['specializations']
+    
+    if spec == 'done':
+        if len(selected) < 1:
+            await query.answer("Please select at least 1 area of expertise.", show_alert=True)
+            return
+        
+        # Save the updated specializations
+        counselor = db.get_counselor_by_user_id(user_id)
+        db.update_counselor_info(counselor['counselor_id'], specializations=selected)
+        
+        specs_text = '\n'.join([f"• {COUNSELING_TOPICS[s]['icon']} {COUNSELING_TOPICS[s]['name']}" for s in selected])
+        
+        USER_STATE[user_id] = {}
+        
+        await query.edit_message_text(
+            f"✅ **Specializations Updated!**\n\n"
+            f"Your new areas of expertise:\n{specs_text}\n\n"
+            f"You'll now receive requests matching these topics.",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back to Profile", callback_data='counselor_edit_profile')
+            ]])
+        )
+        return
+    
+    # Toggle selection
+    if spec in selected:
+        selected.remove(spec)
+    else:
+        if len(selected) >= 2:
+            await query.answer("You can select up to 2 areas maximum.", show_alert=True)
+            return
+        selected.append(spec)
+    
+    USER_STATE[user_id]['specializations'] = selected
+    
+    # Update keyboard
+    keyboard = create_counselor_specialization_keyboard(selected)
+    text = f"""
+**Edit Specializations** 📚
+
+**Selected:** {len(selected)}/2
+
+Choose the topics you feel equipped to counsel on. Select 1-2 areas.
+
+Click the topics to select/deselect:
+"""
+    
+    await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+
+async def edit_gender_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle gender update"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    new_gender = query.data.replace('edit_gender_', '')
+    
+    from hu_counseling_bot import db
+    counselor = db.get_counselor_by_user_id(user_id)
+    
+    # Update gender in database
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    ph = db.param_placeholder
+    
+    cursor.execute(f'''
+        UPDATE counselors 
+        SET gender = {ph}
+        WHERE counselor_id = {ph}
+    ''', (new_gender, counselor['counselor_id']))
+    
+    conn.commit()
+    conn.close()
+    
+    gender_display = {
+        'male': '👨 Male',
+        'female': '👩 Female',
+        'anonymous': '🔒 Anonymous'
+    }.get(new_gender, '🔒 Anonymous')
+    
+    await query.edit_message_text(
+        f"✅ **Gender Updated!**\n\n"
+        f"Your gender is now set to: {gender_display}\n\n"
+        f"This helps with appropriate matching and guidance.",
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Back to Profile", callback_data='counselor_edit_profile')
+        ]])
+    )
+
+
 # Export all handler functions
 __all__ = [
     'register_counselor_start', 'counselor_select_specialization', 'toggle_specialization',
@@ -1238,5 +1616,8 @@ __all__ = [
     'review_counselor', 'approve_counselor_handler', 'reject_counselor_handler',
     'admin_detailed_stats', 'admin_manage_counselors', 'admin_pending_sessions',
     'admin_view_counselor', 'admin_deactivate_counselor', 'admin_reactivate_counselor',
-    'admin_delete_counselor', 'admin_edit_counselor'
+    'admin_delete_counselor', 'admin_edit_counselor',
+    'counselor_edit_profile', 'edit_counselor_name', 'edit_counselor_bio', 'edit_counselor_specs',
+    'edit_counselor_gender', 'handle_counselor_edit_message', 'toggle_edit_specialization',
+    'edit_gender_selected'
 ]
