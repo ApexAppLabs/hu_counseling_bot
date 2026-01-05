@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fix Bad Sessions Tool
+Fix Bad Sessions Tools
 Resolves invalid sessions where user and counselor are the same person
 """
 
