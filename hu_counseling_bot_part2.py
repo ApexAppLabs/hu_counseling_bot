@@ -1140,7 +1140,7 @@ async def admin_accept_session_as_counselor(update: Update, context: ContextType
     session_id = int(query.data.replace('admin_accept_session_', ''))
     user_id = query.from_user.id
     
-    from hu_counseling_bot import db, accept_session
+    from hu_counseling_bot import db, USER_STATE, create_session_control_keyboard
     
     # 1. Get admin's counselor profile
     counselor = db.get_counselor_by_user_id(user_id)
@@ -1148,18 +1148,62 @@ async def admin_accept_session_as_counselor(update: Update, context: ContextType
         await query.answer("⚠️ You must be a registered counselor to accept sessions.", show_alert=True)
         return
 
-    # 2. MATCH the session to this counselor first (changing status from requested -> matched)
-    # This fixes the issue where accept_session fails because status is not 'matched'
+    # 2. MATCH and START the session
+    # We maintain the flow: Requested -> Matched -> Active
+    
+    # First match it
     db.match_session_with_counselor(session_id, counselor['counselor_id'])
     
-    # 3. Now verify it worked and proceed to accept
+    # Then start it manually
+    db.start_session(session_id)
+    
+    # Set active session state for admin
+    if user_id not in USER_STATE:
+        USER_STATE[user_id] = {}
+    USER_STATE[user_id]['active_session_id'] = session_id
+    
+    # 3. Notify User (The Client)
     session = db.get_session(session_id)
-    if session and session['status'] == 'matched':
-        # Hack query data for the reuse of accept_session
-        query.data = f"accept_session_{session_id}"
-        await accept_session(update, context)
-    else:
-        await query.edit_message_text("⚠️ Failed to assign session. It may have been taken by someone else.")
+    client_user_id = session['user_id']
+    from counseling_database import COUNSELING_TOPICS
+    topic_data = COUNSELING_TOPICS.get(session['topic'], {})
+    
+    try:
+        await context.bot.send_message(
+            chat_id=client_user_id,
+            text=f"✅ **Session Started!**\n\n"
+                 f"Your counselor (Admin) has accepted your request. You can now begin your conversation.\n\n"
+                 f"**Topic:** {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}\n\n"
+                 f"🔒 Remember: Everything is anonymous and confidential.\n\n"
+                 f"*Type your message below to start.*",
+            reply_markup=create_session_control_keyboard(is_user=True),
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        # User might have blocked bot
+        pass
+        
+    # 4. Update Admin's View to "Session Started" (Counselor View)
+    desc = session.get('description', 'No description provided')
+    
+    # Get user's gender
+    user_data = db.get_user(client_user_id)
+    user_gender = user_data.get('gender', 'anonymous') if user_data else 'anonymous'
+    gender_display = {
+        'male': '👨 Male',
+        'female': '👩 Female',
+        'anonymous': '🔒 Anonymous'
+    }.get(user_gender, '🔒 Anonymous')
+    
+    await query.edit_message_text(
+        f"✅ **Session Started!**\n\n"
+        f"**Topic:** {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}\n"
+        f"**User Gender:** {gender_display}\n"
+        f"**User's Description:** {desc}\n\n"
+        f"*The user can now send messages. Wait for their first message.*",
+        reply_markup=create_session_control_keyboard(is_user=False),
+        parse_mode='Markdown'
+    )
 
 async def admin_assign_session_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show list of counselors to assign a session to"""
