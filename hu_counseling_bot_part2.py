@@ -223,9 +223,11 @@ async def counselor_enter_display_name(query, context: ContextTypes.DEFAULT_TYPE
     text = """
 **Choose a Display Name** 📛
 
-This name will be shown to users. You can use your real first name or a pseudonym (e.g., "Counselor David", "Joy", "Grace").
+This name will generally be visible to the **Admin** of the bot for management purposes.
 
-*Type your Display Name:*
+Users will typically see "Counselor #ID" to maintain anonymity, though this name may be used for internal identification.
+
+*Type your Display Name (e.g., your real First Name or a Pseudonym):*
 """
     
     keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data='main_menu')]]
@@ -1602,7 +1604,7 @@ async def edit_counselor_name(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 Please type your new display name and send it as a message.
 
-Your display name will be shown to users when they rate their session.
+This name is visible to the **Admin**. Users will essentially see "Counselor #ID" to maintain your anonymity.
 
 *Type your new display name:*
 """
