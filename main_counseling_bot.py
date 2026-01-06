@@ -58,6 +58,9 @@ async def main_menu_handler(update, context):
     # Check admin status
     is_admin = db.is_admin(user_id) or user_id in ADMIN_IDS
     
+    # Check active session status
+    active_session_exists = db.get_active_session_by_user(user_id) is not None
+    
     text = """
 **HU Counseling Service** 🙏
 
@@ -66,7 +69,7 @@ Anonymous counseling for students in the gospel fellowship.
 What would you like to do?
 """
     
-    keyboard = create_main_menu_keyboard(is_counselor, is_admin)
+    keyboard = create_main_menu_keyboard(is_counselor, is_admin, has_active_session=active_session_exists)
     await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
 
 async def menu_command(update, context):
@@ -80,6 +83,9 @@ async def menu_command(update, context):
     # Check admin status
     is_admin = db.is_admin(user_id) or user_id in ADMIN_IDS
     
+    # Check active session status
+    active_session_exists = db.get_active_session_by_user(user_id) is not None
+    
     text = """
 **HU Counseling Service** 🙏
 
@@ -88,7 +94,7 @@ Anonymous counseling for students in the gospel fellowship.
 What would you like to do?
 """
     
-    keyboard = create_main_menu_keyboard(is_counselor, is_admin)
+    keyboard = create_main_menu_keyboard(is_counselor, is_admin, has_active_session=active_session_exists)
     await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
 
 async def cancel_end_handler(update, context):

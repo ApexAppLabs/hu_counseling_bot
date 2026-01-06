@@ -39,10 +39,13 @@ USER_STATE = {}
 
 # ==================== KEYBOARD HELPERS ====================
 
-def create_main_menu_keyboard(is_counselor: bool = False, is_admin: bool = False):
+def create_main_menu_keyboard(is_counselor: bool = False, is_admin: bool = False, has_active_session: bool = False):
     """Create main menu keyboard"""
+    primary_button = InlineKeyboardButton("💬 Go to Current Session", callback_data='current_session') if has_active_session else \
+                     InlineKeyboardButton("🆘 Request Counseling", callback_data='request_counseling')
+                     
     keyboard = [
-        [InlineKeyboardButton("🆘 Request Counseling", callback_data='request_counseling')],
+        [primary_button],
         [InlineKeyboardButton("ℹ️ About Us", callback_data='about'),
          InlineKeyboardButton("❓ Help", callback_data='help')]
     ]
@@ -167,14 +170,18 @@ Choose an option below to get started:
     # Run database checks concurrently
     counselor_task = asyncio.create_task(asyncio.to_thread(db.get_counselor_by_user_id, user.id))
     admin_task = asyncio.create_task(asyncio.to_thread(db.is_admin, user.id))
+    session_task = asyncio.create_task(asyncio.to_thread(db.get_active_session_by_user, user.id))
     
     # Get results
     counselor = await counselor_task
     is_admin_db = await admin_task
+    active_session = await session_task
+    
     is_counselor = counselor and counselor['status'] == 'approved'
     is_admin = is_admin_db or user.id in ADMIN_IDS
+    has_active_session = active_session is not None
     
-    keyboard = create_main_menu_keyboard(is_counselor, is_admin)
+    keyboard = create_main_menu_keyboard(is_counselor, is_admin, has_active_session)
     await update.message.reply_text(welcome_text, reply_markup=keyboard, parse_mode='Markdown')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
