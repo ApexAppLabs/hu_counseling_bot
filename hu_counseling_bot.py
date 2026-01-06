@@ -804,7 +804,23 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
                     session = s
                     break
         if session is None:
-            session = db.get_active_session_by_counselor(counselor['counselor_id'])
+            # Fallback: if they only have ONE active session, default to it
+            active_sessions = db.get_active_sessions_by_counselor(counselor['counselor_id'])
+            if len(active_sessions) == 1:
+                session = active_sessions[0]
+                # Auto-set state for convenience
+                if user_id not in USER_STATE:
+                    USER_STATE[user_id] = {}
+                USER_STATE[user_id]['active_session_id'] = session['session_id']
+            elif len(active_sessions) > 1:
+                # Multiple sessions active but none selected/valid -> Force selection
+                await update.message.reply_text(
+                    "⚠️ **Multiple Active Sessions**\n\n"
+                    "You have multiple active sessions. Please select which one you want to reply to from the dashboard.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📱 Go to Dashboard", callback_data='counselor_dashboard')]]),
+                    parse_mode='Markdown'
+                )
+                return
         
         if session:
             status = session.get('status')
@@ -867,11 +883,15 @@ async def handle_session_message(update: Update, context: ContextTypes.DEFAULT_T
         # Save message
         db.add_message(session_id, 'user', user_id, message_text)
         
-        # Forward to counselor with anonymous display name
+        # Get topic info for clearer notification
+        topic_data = COUNSELING_TOPICS.get(session['topic'], {})
+        topic_name = topic_data.get('name', session['topic'])
+        
+        # Forward to counselor with context info
         try:
             await context.bot.send_message(
                 chat_id=counselor_user_id,
-                text=f"User #{user_id % 10000}\n\n{message_text}",
+                text=f"**User (Session #{session_id})**\nTopic: {topic_name}\n\n{message_text}",
                 parse_mode='Markdown'
             )
             logger.info(f"✅ User {user_id} sent message to counselor {counselor_user_id}")
