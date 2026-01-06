@@ -1096,12 +1096,21 @@ async def admin_view_pending_session(update: Update, context: ContextTypes.DEFAU
 
     topic_data = COUNSELING_TOPICS.get(session['topic'], {})
     
+    # Format created_at to be human readable (remove microseconds)
+    created_time = session.get('created_at', 'Unknown')
+    try:
+        if isinstance(created_time, str):
+            dt = datetime.fromisoformat(created_time)
+            created_time = dt.strftime("%Y-%m-%d %H:%M")
+    except:
+        pass
+
     text = f"""
 **Pending Session #{session_id}** 📋
 
 **Topic:** {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}
 **User Gender:** {gender_display}
-**Created:** {session.get('created_at')}
+**Created:** {created_time}
 
 **Description:**
 {session.get('description', 'No description provided')}
