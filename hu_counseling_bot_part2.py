@@ -1035,24 +1035,109 @@ async def admin_pending_sessions(update: Update, context: ContextTypes.DEFAULT_T
     
     text = f"**Pending Sessions** 🔔\n\nThere are **{len(pending)}** sessions waiting for counselors:\n\n"
     
-    for session in pending[:5]:
+    text = f"**Pending Sessions** 🔔\n\nThere are **{len(pending)}** sessions waiting for counselors.\n\nSelect a session to view details or assign manually:"
+    
+    keyboard = []
+    
+    for session in pending:
         topic_data = COUNSELING_TOPICS.get(session['topic'], {})
-        text += f"**Session #{session['session_id']}**\n"
-        text += f"Topic: {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}\n"
-        text += f"Requested: {session.get('created_at', 'Unknown')}\n"
-        text += f"Description: {session.get('description', 'No description')[:50]}...\n\n"
+        topic_name = topic_data.get('name', session['topic'])
+        wait_time = "Unknown"
+        # simple wait time calc if created_at is string
+        if isinstance(session.get('created_at'), str):
+            try:
+                created_dt = datetime.fromisoformat(session['created_at'])
+                delta = datetime.now() - created_dt
+                minutes = int(delta.total_seconds() / 60)
+                wait_time = f"{minutes}m"
+            except:
+                pass
+                
+        button_text = f"#{session['session_id']} {topic_name} (Wait: {wait_time})"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f'admin_view_session_{session["session_id"]}')])
     
-    if len(pending) > 5:
-        text += f"\n*...and {len(pending) - 5} more sessions*"
-    
-    text += "\n\n💡 **Note:** These sessions are waiting for available counselors to come online."
-    
-    keyboard = [
+    keyboard.extend([
         [InlineKeyboardButton("🔄 Refresh", callback_data='admin_pending_sessions')],
         [InlineKeyboardButton("◀️ Back", callback_data='admin_panel')]
-    ]
+    ])
     
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def admin_view_pending_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """View details of a pending session and take action"""
+    query = update.callback_query
+    await query.answer()
+    
+    try:
+        session_id = int(query.data.replace('admin_view_session_', ''))
+    except ValueError:
+        return
+
+    from hu_counseling_bot import db, ADMIN_IDS
+    session = db.get_session(session_id)
+    
+    if not session or session['status'] != 'requested':
+        await query.edit_message_text(
+            "⚠️ This session is no longer pending (it may have been accepted or cancelled).",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Back", callback_data='admin_pending_sessions')]])
+        )
+        return
+
+    # Get user gender for context
+    user_data = db.get_user(session['user_id'])
+    user_gender = user_data.get('gender', 'anonymous') if user_data else 'anonymous'
+    gender_display = {
+        'male': '👨 Male',
+        'female': '👩 Female',
+        'anonymous': '🔒 Anonymous'
+    }.get(user_gender, '🔒 Anonymous')
+
+    topic_data = COUNSELING_TOPICS.get(session['topic'], {})
+    
+    text = f"""
+**Pending Session #{session_id}** 📋
+
+**Topic:** {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}
+**User Gender:** {gender_display}
+**Created:** {session.get('created_at')}
+
+**Description:**
+{session.get('description', 'No description provided')}
+
+**Actions:**
+"""
+    
+    keyboard = []
+    
+    # Check if admin is also a counselor
+    counselor = db.get_counselor_by_user_id(query.from_user.id)
+    if counselor and counselor['status'] == 'approved':
+        keyboard.append([InlineKeyboardButton("✅ Accept Session Myself", callback_data=f'admin_accept_session_{session_id}')])
+    
+    # Future feature: Force assign to another counselor
+    # keyboard.append([InlineKeyboardButton("busts_in_silhouette Assign to Counselor...", callback_data=f'admin_assign_session_{session_id}')])
+    
+    keyboard.append([InlineKeyboardButton("◀️ Back to List", callback_data='admin_pending_sessions')])
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def admin_accept_session_as_counselor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin accepts a pending session directly"""
+    query = update.callback_query
+    await query.answer()
+    
+    session_id = int(query.data.replace('admin_accept_session_', ''))
+    
+    # Use the existing accept logic but trigger it manually
+    # We pretend this is a normal accept_session callback
+    # The accept_session handler expects 'accept_session_ID' in data, so we can route to it 
+    # OR we can just call the logic directly. Let's redirect to the standard handler for consistency.
+    
+    # We need to hack the query data to match what accept_session expects
+    query.data = f"accept_session_{session_id}"
+    
+    from hu_counseling_bot import accept_session
+    await accept_session(update, context)
 
 # ==================== NEW ADMIN MANAGEMENT HANDLERS ====================
 
@@ -1682,5 +1767,6 @@ __all__ = [
     'admin_delete_counselor', 'admin_edit_counselor',
     'counselor_edit_profile', 'edit_counselor_name', 'edit_counselor_bio', 'edit_counselor_specs',
     'edit_counselor_gender', 'handle_counselor_edit_message', 'toggle_edit_specialization',
-    'edit_gender_selected'
+    'edit_gender_selected',
+    'admin_view_pending_session', 'admin_accept_session_as_counselor'
 ]

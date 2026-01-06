@@ -35,7 +35,8 @@ from hu_counseling_bot_part2 import (
     admin_delete_counselor, admin_edit_counselor,
     counselor_edit_profile, edit_counselor_name, edit_counselor_bio, edit_counselor_specs,
     edit_counselor_gender, handle_counselor_edit_message, toggle_edit_specialization,
-    edit_gender_selected, handle_counselor_display_name
+    edit_gender_selected, handle_counselor_display_name,
+    admin_view_pending_session, admin_accept_session_as_counselor
 )
 
 # Setup comprehensive logging with file rotation
@@ -236,6 +237,8 @@ def _build_application():
     app.add_handler(CallbackQueryHandler(admin_detailed_stats, pattern='^admin_detailed_stats$'))
     app.add_handler(CallbackQueryHandler(admin_manage_counselors, pattern='^admin_manage_counselors$'))
     app.add_handler(CallbackQueryHandler(admin_pending_sessions, pattern='^admin_pending_sessions$'))
+    app.add_handler(CallbackQueryHandler(admin_view_pending_session, pattern='^admin_view_session_'))
+    app.add_handler(CallbackQueryHandler(admin_accept_session_as_counselor, pattern='^admin_accept_session_'))
     
     # Admin counselor management
     app.add_handler(CallbackQueryHandler(admin_view_counselor, pattern='^admin_view_counselor_'))
