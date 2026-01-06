@@ -1114,8 +1114,8 @@ async def admin_view_pending_session(update: Update, context: ContextTypes.DEFAU
     if counselor and counselor['status'] == 'approved':
         keyboard.append([InlineKeyboardButton("✅ Accept Session Myself", callback_data=f'admin_accept_session_{session_id}')])
     
-    # Future feature: Force assign to another counselor
-    # keyboard.append([InlineKeyboardButton("busts_in_silhouette Assign to Counselor...", callback_data=f'admin_assign_session_{session_id}')])
+    # Assign to other counselor option
+    keyboard.append([InlineKeyboardButton("👥 Assign to Other Counselor", callback_data=f'admin_assign_start_{session_id}')])
     
     keyboard.append([InlineKeyboardButton("◀️ Back to List", callback_data='admin_pending_sessions')])
     
@@ -1127,17 +1127,154 @@ async def admin_accept_session_as_counselor(update: Update, context: ContextType
     await query.answer()
     
     session_id = int(query.data.replace('admin_accept_session_', ''))
+    user_id = query.from_user.id
     
-    # Use the existing accept logic but trigger it manually
-    # We pretend this is a normal accept_session callback
-    # The accept_session handler expects 'accept_session_ID' in data, so we can route to it 
-    # OR we can just call the logic directly. Let's redirect to the standard handler for consistency.
+    from hu_counseling_bot import db, accept_session
     
-    # We need to hack the query data to match what accept_session expects
-    query.data = f"accept_session_{session_id}"
+    # 1. Get admin's counselor profile
+    counselor = db.get_counselor_by_user_id(user_id)
+    if not counselor or counselor['status'] != 'approved':
+        await query.answer("⚠️ You must be a registered counselor to accept sessions.", show_alert=True)
+        return
+
+    # 2. MATCH the session to this counselor first (changing status from requested -> matched)
+    # This fixes the issue where accept_session fails because status is not 'matched'
+    db.match_session_with_counselor(session_id, counselor['counselor_id'])
     
-    from hu_counseling_bot import accept_session
-    await accept_session(update, context)
+    # 3. Now verify it worked and proceed to accept
+    session = db.get_session(session_id)
+    if session and session['status'] == 'matched':
+        # Hack query data for the reuse of accept_session
+        query.data = f"accept_session_{session_id}"
+        await accept_session(update, context)
+    else:
+        await query.edit_message_text("⚠️ Failed to assign session. It may have been taken by someone else.")
+
+async def admin_assign_session_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show list of counselors to assign a session to"""
+    query = update.callback_query
+    await query.answer()
+    
+    session_id = int(query.data.replace('admin_assign_start_', ''))
+    
+    from hu_counseling_bot import db
+    
+    # Get session to check topic
+    session = db.get_session(session_id)
+    if not session:
+        return
+    session_topic = session['topic']
+    
+    # Get all potential counselors with specs
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT counselor_id, display_name, is_available, total_sessions, specializations
+        FROM counselors 
+        WHERE status = 'approved'
+        ORDER BY is_available DESC, total_sessions ASC
+        LIMIT 20
+    ''')
+    counselors = cursor.fetchall()
+    conn.close()
+    
+    if not counselors:
+        await query.edit_message_text(
+            "⚠️ No approved counselors found to assign to.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Back", callback_data=f'admin_view_session_{session_id}')]])
+        )
+        return
+        
+    text = f"**Assign Session #{session_id}**\n\nSelect a counselor to assign this session to:\n⭐ = Specialized in this topic"
+    
+    keyboard = []
+    
+    import json
+    
+    for c in counselors:
+        # Parse specs
+        specs = []
+        try:
+            val = c['specializations']
+            if val:
+                specs = json.loads(val)
+        except:
+            pass
+            
+        is_spec = session_topic in specs or 'other' in specs
+        spec_mark = "⭐" if session_topic in specs else ""
+        
+        status = "🟢" if c['is_available'] else "🔴"
+        btn_text = f"{status} {c['display_name']} {spec_mark}"
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f'admin_assign_confirm_{session_id}_{c["counselor_id"]}')])
+        
+    keyboard.append([InlineKeyboardButton("◀️ Back", callback_data=f'admin_view_session_{session_id}')])
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def admin_assign_session_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Perform the assignment of a session to a counselor"""
+    query = update.callback_query
+    await query.answer()
+    
+    try:
+        _, _, _, session_id_str, counselor_id_str = query.data.split('_')
+        session_id = int(session_id_str)
+        counselor_id = int(counselor_id_str)
+    except:
+        return
+        
+    from hu_counseling_bot import db, COUNSELING_TOPICS
+    
+    # Check if session is still pending
+    session = db.get_session(session_id)
+    if not session or session['status'] != 'requested':
+        await query.edit_message_text("⚠️ Session is no longer pending.")
+        return
+        
+    # Match in DB
+    db.match_session_with_counselor(session_id, counselor_id)
+    
+    # Notify the counselor
+    counselor = db.get_counselor(counselor_id)
+    if not counselor:
+        await query.edit_message_text("⚠️ Create counselor error.")
+        return
+        
+    topic_data = COUNSELING_TOPICS.get(session['topic'], {})
+    desc = session.get('description') or 'No description provided'
+    
+    # Get user gender
+    user_data = db.get_user(session['user_id'])
+    user_gender = user_data.get('gender', 'anonymous') if user_data else 'anonymous'
+    gender_display = {'male': '👨 Male', 'female': '👩 Female'}.get(user_gender, '🔒 Anonymous')
+    
+    # Send notification to assigned counselor
+    try:
+        keyboard = [[
+            InlineKeyboardButton("✅ Accept Session", callback_data=f'accept_session_{session_id}'),
+            InlineKeyboardButton("❌ Decline", callback_data=f'decline_session_{session_id}')
+        ]]
+        
+        await context.bot.send_message(
+            chat_id=counselor['user_id'],
+            text=(
+                f"**🔔 Session Assigned by Admin**\n\n"
+                f"An admin has manually assigned you a session.\n\n"
+                f"**Topic:** {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}\n"
+                f"**User Gender:** {gender_display}\n"
+                f"**Description:** {desc[:100]}...\n\n"
+                f"Please accept or decline below."
+            ),
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        msg = f"✅ **Assigned!**\n\nSession #{session_id} has been assigned to {counselor['display_name']}."
+    except Exception as e:
+        msg = f"⚠️ Assigned but failed to notify counselor: {e}"
+    
+    keyboard = [[InlineKeyboardButton("◀️ Back to List", callback_data='admin_pending_sessions')]]
+    await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
 # ==================== NEW ADMIN MANAGEMENT HANDLERS ====================
 
@@ -1768,5 +1905,7 @@ __all__ = [
     'counselor_edit_profile', 'edit_counselor_name', 'edit_counselor_bio', 'edit_counselor_specs',
     'edit_counselor_gender', 'handle_counselor_edit_message', 'toggle_edit_specialization',
     'edit_gender_selected',
-    'admin_view_pending_session', 'admin_accept_session_as_counselor'
+    'edit_gender_selected',
+    'admin_view_pending_session', 'admin_accept_session_as_counselor',
+    'admin_assign_session_start', 'admin_assign_session_confirm'
 ]
