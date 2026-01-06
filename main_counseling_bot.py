@@ -35,7 +35,7 @@ from hu_counseling_bot_part2 import (
     admin_delete_counselor, admin_edit_counselor,
     counselor_edit_profile, edit_counselor_name, edit_counselor_bio, edit_counselor_specs,
     edit_counselor_gender, handle_counselor_edit_message, toggle_edit_specialization,
-    edit_gender_selected
+    edit_gender_selected, handle_counselor_display_name
 )
 
 # Setup comprehensive logging with file rotation
@@ -252,6 +252,12 @@ def _build_application():
         # Import USER_STATE
         from hu_counseling_bot import USER_STATE
         
+        # Check if awaiting bio
+        # Check if awaiting display name
+        if user_id in USER_STATE and USER_STATE[user_id].get('awaiting_display_name'):
+            await handle_counselor_display_name(update, context)
+            return
+
         # Check if awaiting bio
         if user_id in USER_STATE and USER_STATE[user_id].get('awaiting_bio'):
             await handle_counselor_bio(update, context)

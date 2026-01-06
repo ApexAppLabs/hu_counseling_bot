@@ -693,7 +693,7 @@ class CounselingDatabase:
         logger.warning(f"Counselor {counselor_id} DELETED by admin {admin_id}")
         return True
     
-    def update_counselor_info(self, counselor_id: int, display_name: str = None, bio: str = None, specializations: List[str] = None):
+    def update_counselor_info(self, counselor_id: int, display_name: str = None, bio: str = None, specializations: List[str] = None, gender: str = None):
         """Update counselor information"""
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -713,6 +713,10 @@ class CounselingDatabase:
         if specializations:
             updates.append(f"specializations = {ph}")
             params.append(json.dumps(specializations))
+
+        if gender:
+            updates.append(f"gender = {ph}")
+            params.append(gender)
         
         if updates:
             query = f"UPDATE counselors SET {', '.join(updates)} WHERE counselor_id = {ph}"

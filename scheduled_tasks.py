@@ -166,10 +166,20 @@ class ScheduledTasksManager:
                                         {"text": "❌ Decline", "callback_data": f"decline_session_{session_id}"}
                                     ]]
                                     
+                                    # Get user's gender
+                                    user_data = self.db.get_user(session['user_id'])
+                                    user_gender = user_data.get('gender', 'anonymous') if user_data else 'anonymous'
+                                    gender_display = {
+                                        'male': '👨 Male',
+                                        'female': '👩 Female',
+                                        'anonymous': '🔒 Anonymous'
+                                    }.get(user_gender, '🔒 Anonymous')
+
                                     await bot.send_message(
                                         chat_id=counselor['user_id'],
                                         text=f"**🔔 New Counseling Request**\n\n"
                                              f"**Topic:** {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}\n"
+                                             f"**User Gender:** {gender_display}\n"
                                              f"**Description:** {session.get('description', 'No description provided')[:100]}{'...' if len(session.get('description', '')) > 100 else ''}\n\n"
                                              f"Would you like to accept this session?",
                                         reply_markup={"inline_keyboard": keyboard},

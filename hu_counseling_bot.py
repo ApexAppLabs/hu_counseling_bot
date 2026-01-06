@@ -444,17 +444,19 @@ async def initiate_matching_process(user_id: int, topic: str, description: str, 
         if hasattr(response_handler, 'edit_message_text'):
             # Callback query response
             await response_handler.edit_message_text(
-                f"✅ **Match Found!**\n\n"
-                f"We've matched you with a counselor specialized in **{topic_data.get('name', topic)}**.\n\n"
-                f"Waiting for the counselor to accept...",
+                f"✅ **Request Received**\n\n"
+                f"We have processed your request for **{topic_data.get('name', topic)}**.\n\n"
+                f"We are currently finding the best counselor for you. You will be notified immediately when a counselor accepts your request.\n\n"
+                f"🔔 A counselor will be with you shortly.",
                 parse_mode='Markdown'
             )
         else:
             # Direct message response
             await response_handler.message.reply_text(
-                f"✅ **Match Found!**\n\n"
-                f"We've matched you with a counselor specialized in **{topic_data.get('name', topic)}**.\n\n"
-                f"Waiting for the counselor to accept...\n\n"
+                f"✅ **Request Received**\n\n"
+                f"We have processed your request for **{topic_data.get('name', topic)}**.\n\n"
+                f"We are currently finding the best counselor for you. You will be notified immediately when a counselor accepts your request.\n\n"
+                f"🔔 A counselor will be with you shortly.\n\n"
                 f"🔒 Remember: Everything is anonymous and confidential.",
                 parse_mode='Markdown'
             )
@@ -485,19 +487,26 @@ async def initiate_matching_process(user_id: int, topic: str, description: str, 
         logger.info(f"Should notify counselor {counselor_user_id} about session {session_id}")
     else:
         # No counselor available RIGHT NOW (request is placed in the waiting queue)
+        # Ensure we have topic data
+        topic_data = COUNSELING_TOPICS.get(topic, {})
+        
         if hasattr(response_handler, 'edit_message_text'):
             # Callback query response
             await response_handler.edit_message_text(
-                "⏳ **Request Submitted**\n\n"
-                "Your request has been submitted. A counselor will review and accept it shortly. You’re now in the waiting queue.",
+                f"✅ **Request Received**\n\n"
+                f"We have processed your request for **{topic_data.get('name', topic)}**.\n\n"
+                f"We are currently finding the best counselor for you. You will be notified immediately when a counselor accepts your request.\n\n"
+                f"🔔 A counselor will be with you shortly.",
                 parse_mode='Markdown'
             )
         else:
             # Direct message response
             await response_handler.message.reply_text(
-                "⏳ **Request Submitted**\n\n"
-                "Your request has been submitted. A counselor will review and accept it shortly. You’re now in the waiting queue.\n\n"
-                "📱 You can check your request status anytime from the main menu.",
+                f"✅ **Request Received**\n\n"
+                f"We have processed your request for **{topic_data.get('name', topic)}**.\n\n"
+                f"We are currently finding the best counselor for you. You will be notified immediately when a counselor accepts your request.\n\n"
+                f"🔔 A counselor will be with you shortly.\n\n"
+                f"📱 You can check your request status anytime from the main menu.",
                 parse_mode='Markdown',
                 reply_markup=create_main_menu_keyboard()
             )
@@ -550,9 +559,10 @@ async def create_counseling_session(update: Update, context: ContextTypes.DEFAUL
         
         # Notify user
         await update.message.reply_text(
-            f"✅ **Match Found!**\n\n"
-            f"We've matched you with a counselor specialized in **{topic_data.get('name', topic)}**.\n\n"
-            f"Waiting for the counselor to accept...\n\n"
+            f"✅ **Request Received**\n\n"
+            f"We have processed your request for **{topic_data.get('name', topic)}**.\n\n"
+            f"We are currently finding the best counselor for you. You will be notified immediately when a counselor accepts your request.\n\n"
+            f"🔔 A counselor will be with you shortly.\n\n"
             f"🔒 Remember: Everything is anonymous and confidential.",
             parse_mode='Markdown'
         )
@@ -586,11 +596,14 @@ async def create_counseling_session(update: Update, context: ContextTypes.DEFAUL
         )
     else:
         # No counselor available
+        topic_data = COUNSELING_TOPICS.get(topic, {})
+        
         await update.message.reply_text(
-            "⏳ **Request Submitted**\n\n"
-            "There are currently no available counselors for your topic.\n\n"
-            "You've been added to the queue. We'll notify you as soon as a counselor becomes available.\n\n"
-            "📱 You can check your request status anytime from the main menu.",
+            f"✅ **Request Received**\n\n"
+            f"We have processed your request for **{topic_data.get('name', topic)}**.\n\n"
+            f"We are currently finding the best counselor for you. You will be notified immediately when a counselor accepts your request.\n\n"
+            f"🔔 A counselor will be with you shortly.\n\n"
+            f"📱 You can check your request status anytime from the main menu.",
             parse_mode='Markdown',
             reply_markup=create_main_menu_keyboard()
         )
@@ -625,9 +638,10 @@ async def create_counseling_session_from_callback(query, context: ContextTypes.D
         topic_data = COUNSELING_TOPICS.get(topic, {})
         
         await query.edit_message_text(
-            f"✅ **Match Found!**\n\n"
-            f"We've matched you with a counselor specialized in **{topic_data.get('name', topic)}**.\n\n"
-            f"Waiting for the counselor to accept...",
+            f"✅ **Request Received**\n\n"
+            f"We have processed your request for **{topic_data.get('name', topic)}**.\n\n"
+            f"We are currently finding the best counselor for you. You will be notified immediately when a counselor accepts your request.\n\n"
+            f"🔔 A counselor will be with you shortly.",
             parse_mode='Markdown'
         )
         
@@ -659,10 +673,13 @@ async def create_counseling_session_from_callback(query, context: ContextTypes.D
             parse_mode='Markdown'
         )
     else:
+        topic_data = COUNSELING_TOPICS.get(topic, {})
+        
         await query.edit_message_text(
-            "⏳ **Request Submitted**\n\n"
-            "There are currently no available counselors for your topic.\n\n"
-            "You've been added to the queue. We'll notify you as soon as a counselor becomes available.",
+            f"✅ **Request Received**\n\n"
+            f"We have processed your request for **{topic_data.get('name', topic)}**.\n\n"
+            f"We are currently finding the best counselor for you. You will be notified immediately when a counselor accepts your request.\n\n"
+            f"🔔 A counselor will be with you shortly.",
             parse_mode='Markdown'
         )
     

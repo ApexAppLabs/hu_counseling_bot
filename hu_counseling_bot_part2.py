@@ -211,8 +211,71 @@ async def gender_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     USER_STATE[user_id]['gender'] = gender
     
-    # Move to bio step
-    await counselor_enter_bio(query, context)
+    # Move to display name step
+    await counselor_enter_display_name(query, context)
+
+async def counselor_enter_display_name(query, context: ContextTypes.DEFAULT_TYPE):
+    """Ask counselor to enter display name"""
+    user_id = query.from_user.id
+    
+    from hu_counseling_bot import USER_STATE
+    
+    text = """
+**Choose a Display Name** 📛
+
+This name will be shown to users. You can use your real first name or a pseudonym (e.g., "Counselor David", "Joy", "Grace").
+
+*Type your Display Name:*
+"""
+    
+    keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data='main_menu')]]
+    
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+    USER_STATE[user_id]['awaiting_display_name'] = True
+
+async def handle_counselor_display_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle counselor display name submission"""
+    user_id = update.effective_user.id
+    from hu_counseling_bot import USER_STATE, db
+    
+    if user_id not in USER_STATE or not USER_STATE[user_id].get('awaiting_display_name'):
+        return
+
+    name = update.message.text.strip()
+    
+    if len(name) < 2:
+        await update.message.reply_text("⚠️ Name is too short. Please use at least 2 characters.")
+        return
+        
+    if len(name) > 50:
+        await update.message.reply_text("⚠️ Name is too long. Please keep it under 50 characters.")
+        return
+        
+    USER_STATE[user_id]['display_name'] = name
+    USER_STATE[user_id]['awaiting_display_name'] = False
+    
+    # Now ask for bio
+    selected = USER_STATE[user_id].get('specializations', [])
+    topics_text = '\\n'.join([f"• {COUNSELING_TOPICS[s]['icon']} {COUNSELING_TOPICS[s]['name']}" for s in selected])
+    
+    text = f"""
+**Display Name Set:** {name} ✅
+
+**Your expertise:**
+{topics_text}
+
+**Now, write a brief bio** (2-3 sentences):
+
+Tell us about yourself:
+• Your year/major
+• Why you want to be a counselor
+• Any relevant experience
+
+*Type your bio and send it as a message:*
+"""
+    
+    USER_STATE[user_id]['awaiting_bio'] = True
+    await update.message.reply_text(text, parse_mode='Markdown')
 
 async def counselor_enter_bio(query, context: ContextTypes.DEFAULT_TYPE):
     """Ask counselor to enter bio"""
@@ -271,7 +334,7 @@ async def handle_counselor_bio(update: Update, context: ContextTypes.DEFAULT_TYP
     # Save counselor application
     selected = USER_STATE[user_id].get('specializations', [])
     gender = USER_STATE[user_id].get('gender', 'anonymous')
-    display_name = f"{update.effective_user.first_name or 'Counselor'}"
+    display_name = USER_STATE[user_id].get('display_name') or f"{update.effective_user.first_name or 'Counselor'}"
     
     counselor_id = db.register_counselor(user_id, display_name, bio, selected, gender)
     
@@ -436,6 +499,15 @@ async def toggle_availability(update: Update, context: ContextTypes.DEFAULT_TYPE
             desc = session.get('description') or 'No description provided'
             preview = desc[:100] + ('...' if len(desc) > 100 else '')
 
+            # Get user's gender
+            user_data = db.get_user(session['user_id'])
+            user_gender = user_data.get('gender', 'anonymous') if user_data else 'anonymous'
+            gender_display = {
+                'male': '👨 Male',
+                'female': '👩 Female',
+                'anonymous': '🔒 Anonymous'
+            }.get(user_gender, '🔒 Anonymous')
+
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Accept Session", callback_data=f'accept_session_{session_id}'),
                 InlineKeyboardButton("❌ Decline", callback_data=f'decline_session_{session_id}')
@@ -446,6 +518,7 @@ async def toggle_availability(update: Update, context: ContextTypes.DEFAULT_TYPE
                 text=(
                     f"**🔔 New Counseling Request**\n\n"
                     f"**Topic:** {topic_data.get('icon', '💬')} {topic_data.get('name', session['topic'])}\n"
+                    f"**User Gender:** {gender_display}\n"
                     f"**Description:** {preview}\n\n"
                     f"Would you like to accept this session?"
                 ),
@@ -1577,19 +1650,8 @@ async def edit_gender_selected(update: Update, context: ContextTypes.DEFAULT_TYP
     from hu_counseling_bot import db
     counselor = db.get_counselor_by_user_id(user_id)
     
-    # Update gender in database
-    conn = db.get_connection()
-    cursor = conn.cursor()
-    ph = db.param_placeholder
-    
-    cursor.execute(f'''
-        UPDATE counselors 
-        SET gender = {ph}
-        WHERE counselor_id = {ph}
-    ''', (new_gender, counselor['counselor_id']))
-    
-    conn.commit()
-    conn.close()
+    # Update gender in database using the unified method
+    db.update_counselor_info(counselor['counselor_id'], gender=new_gender)
     
     gender_display = {
         'male': '👨 Male',
@@ -1612,6 +1674,7 @@ async def edit_gender_selected(update: Update, context: ContextTypes.DEFAULT_TYP
 __all__ = [
     'register_counselor_start', 'counselor_select_specialization', 'toggle_specialization',
     'gender_selected', 'handle_counselor_bio', 'counselor_dashboard', 'toggle_availability', 'counselor_stats',
+    'handle_counselor_display_name',
     'rate_session_start', 'submit_rating', 'admin_panel', 'admin_pending_counselors',
     'review_counselor', 'approve_counselor_handler', 'reject_counselor_handler',
     'admin_detailed_stats', 'admin_manage_counselors', 'admin_pending_sessions',
